@@ -48,26 +48,27 @@ function countWorkdays(ini,fin,bdayStr){
 }
 
 // ── EMPLOYEES ──
-// pdTotal = Personal Days totales por año (3 para todos)
-// pdUsados = Personal Days ya usados antes del portal (histórico)
-// Jorge Soto: sus 3 PD no acumulan, vencen el 31/12/2026
+// pdTotal  = Personal Days por año (3 para todos, no acumulables)
+// pdUsados = Días ya tomados en 2026 ANTES del portal (histórico)
+// Los PD se resetean automáticamente cada 1 de enero
+// Si no se usan antes del 31/12 se pierden
 const EMPLOYEES = [
-  {cedula:'111840112',nombre:'Cristiana María Echandi Montero',   puesto:'Project Manager',            ingreso:'2019-10-01',consumidos:64,  email:'cechandi@leancr.com',  pdTotal:3, pdUsados:0},
-  {cedula:'116270838',nombre:'Alfonso Salomón Segura Salazar',    puesto:'Project Engineer',            ingreso:'2019-10-01',consumidos:57,  email:'asegura@leancr.com',   pdTotal:3, pdUsados:0},
-  {cedula:'111320139',nombre:'Cristián Fernández Cardos',         puesto:'Gerente General',             ingreso:'2019-10-01',consumidos:80,  email:'cfernandez@leancr.com',pdTotal:3, pdUsados:0},
+  {cedula:'111840112',nombre:'Cristiana María Echandi Montero',   puesto:'Project Manager',            ingreso:'2019-10-01',consumidos:64,  email:'cechandi@leancr.com',  pdTotal:3, pdUsados:0  },
+  {cedula:'116270838',nombre:'Alfonso Salomón Segura Salazar',    puesto:'Project Engineer',            ingreso:'2019-10-01',consumidos:57,  email:'asegura@leancr.com',   pdTotal:3, pdUsados:0  },
+  {cedula:'111320139',nombre:'Cristián Fernández Cardos',         puesto:'Gerente General',             ingreso:'2019-10-01',consumidos:80,  email:'cfernandez@leancr.com',pdTotal:3, pdUsados:0  },
   {cedula:'305210209',nombre:'Sugey Elizabeth Mora Ureña',        puesto:'Project Engineer',            ingreso:'2022-09-15',consumidos:26,  email:'smora@leancr.com',     pdTotal:3, pdUsados:0.5},
-  {cedula:'115420183',nombre:'Edgard Allan Solís Chaverri',       puesto:'Project Manager',             ingreso:'2022-10-03',consumidos:21,  email:'asolis@leancr.com',    pdTotal:3, pdUsados:0},
-  {cedula:'114230764',nombre:'Carlos Andrés Gutiérrez Garbanzo',  puesto:'Project Engineer',            ingreso:'2023-02-01',consumidos:23,  email:'cgutierrez@leancr.com',pdTotal:3, pdUsados:3},
-  {cedula:'117730278',nombre:'Maron Yanin Arrieta Hernández',     puesto:'Project Engineer',            ingreso:'2023-05-15',consumidos:24,  email:'marrieta@leancr.com',  pdTotal:3, pdUsados:2},
-  {cedula:'115780240',nombre:'Nicole Alexandra Cajina Cruz',      puesto:'Project Engineer',            ingreso:'2023-06-15',consumidos:25,  email:'ncajina@leancr.com',   pdTotal:3, pdUsados:0},
-  {cedula:'115570313',nombre:'Héctor Esteban Ureña Marín',        puesto:'Asistente Administrativo',    ingreso:'2024-02-26',consumidos:16,  email:'hurena@leancr.com',    pdTotal:3, pdUsados:0},
-  {cedula:'117870532',nombre:'María Fernanda Zeledón Barrios',    puesto:'Document Controller',         ingreso:'2024-03-18',consumidos:15,  email:'mzeledon@leancr.com',  pdTotal:3, pdUsados:1},
-  {cedula:'305130742',nombre:'Santiago Hernán Brenes Aguilar',    puesto:'Project Controller',          ingreso:'2024-04-01',consumidos:15,  email:'sbrenes@leancr.com',   pdTotal:3, pdUsados:0},
-  {cedula:'115840947',nombre:'Jesús Andrés Valverde Chaves',      puesto:'Site Construction Engineer',  ingreso:'2024-04-15',consumidos:12,  email:'avalverde@leancr.com', pdTotal:3, pdUsados:1},
-  {cedula:'116700149',nombre:'Jorge Soto Badilla',                puesto:'MEP Engineer',                ingreso:'2024-09-09',consumidos:15,  email:'jsoto@leancr.com',     pdTotal:3, pdUsados:0, pdVence:'2026-12-31'},
-  {cedula:'117610198',nombre:'Keila Fernández Sandí',             puesto:'Coordinadora Administrativa', ingreso:'2025-03-03',consumidos:5.5, email:'kfernandez@leancr.com',pdTotal:3, pdUsados:1},
-  {cedula:'206160552',nombre:'Oscar Salazar Corrales',            puesto:'Ingeniero en Electrónica',    ingreso:'2025-06-09',consumidos:4,   email:'osalazar@leancr.com',  pdTotal:3, pdUsados:0},
-  {cedula:'303840620',nombre:'Humberto José Navarro Guzmán',      puesto:'Director de Proyectos',       ingreso:'2025-11-24',consumidos:6,   email:'hnavarro@leancr.com',  pdTotal:3, pdUsados:0},
+  {cedula:'115420183',nombre:'Edgard Allan Solís Chaverri',       puesto:'Project Manager',             ingreso:'2022-10-03',consumidos:21,  email:'asolis@leancr.com',    pdTotal:3, pdUsados:0  },
+  {cedula:'114230764',nombre:'Carlos Andrés Gutiérrez Garbanzo',  puesto:'Project Engineer',            ingreso:'2023-02-01',consumidos:23,  email:'cgutierrez@leancr.com',pdTotal:3, pdUsados:3  },
+  {cedula:'117730278',nombre:'Maron Yanin Arrieta Hernández',     puesto:'Project Engineer',            ingreso:'2023-05-15',consumidos:24,  email:'marrieta@leancr.com',  pdTotal:3, pdUsados:2  },
+  {cedula:'115780240',nombre:'Nicole Alexandra Cajina Cruz',      puesto:'Project Engineer',            ingreso:'2023-06-15',consumidos:25,  email:'ncajina@leancr.com',   pdTotal:3, pdUsados:0  },
+  {cedula:'115570313',nombre:'Héctor Esteban Ureña Marín',        puesto:'Asistente Administrativo',    ingreso:'2024-02-26',consumidos:16,  email:'hurena@leancr.com',    pdTotal:3, pdUsados:0  },
+  {cedula:'117870532',nombre:'María Fernanda Zeledón Barrios',    puesto:'Document Controller',         ingreso:'2024-03-18',consumidos:15,  email:'mzeledon@leancr.com',  pdTotal:3, pdUsados:1  },
+  {cedula:'305130742',nombre:'Santiago Hernán Brenes Aguilar',    puesto:'Project Controller',          ingreso:'2024-04-01',consumidos:15,  email:'sbrenes@leancr.com',   pdTotal:3, pdUsados:0  },
+  {cedula:'115840947',nombre:'Jesús Andrés Valverde Chaves',      puesto:'Site Construction Engineer',  ingreso:'2024-04-15',consumidos:12,  email:'avalverde@leancr.com', pdTotal:3, pdUsados:1  },
+  {cedula:'116700149',nombre:'Jorge Soto Badilla',                puesto:'MEP Engineer',                ingreso:'2024-09-09',consumidos:15,  email:'jsoto@leancr.com',     pdTotal:3, pdUsados:0  },
+  {cedula:'117610198',nombre:'Keila Fernández Sandí',             puesto:'Coordinadora Administrativa', ingreso:'2025-03-03',consumidos:5.5, email:'kfernandez@leancr.com',pdTotal:3, pdUsados:1  },
+  {cedula:'206160552',nombre:'Oscar Salazar Corrales',            puesto:'Ingeniero en Electrónica',    ingreso:'2025-06-09',consumidos:4,   email:'osalazar@leancr.com',  pdTotal:3, pdUsados:0  },
+  {cedula:'303840620',nombre:'Humberto José Navarro Guzmán',      puesto:'Director de Proyectos',       ingreso:'2025-11-24',consumidos:6,   email:'hnavarro@leancr.com',  pdTotal:3, pdUsados:0  },
 ];
 
 // ── STATE ──
@@ -120,17 +121,23 @@ function calcVac(emp){
 }
 
 // ── PERSONAL DAYS ──
+// 3 PD por año · No acumulables · Se resetean el 1 de enero automáticamente
+// pdUsados en EMPLOYEES = histórico tomado en 2026 ANTES del portal
 function calcPD(emp){
   const anio = new Date().getFullYear();
-  // Solo se descuentan PD APROBADOS del año actual
+  // Solo cuenta PD aprobados del año en curso desde el portal
   const usadosPortal = tickets
-    .filter(t=>t.cedula===emp.cedula && t.tipo==='personalday' && t.status==='approved')
-    .filter(t=>t.fecha && t.fecha.startsWith(anio.toString()))
-    .reduce((s,t)=>s+(parseFloat(t.details.dias)||0),0);
-  const usados = Math.round((emp.pdUsados + usadosPortal)*10)/10;
-  const disp   = Math.round((emp.pdTotal - usados)*10)/10;
-  const vence  = emp.pdVence || null;
-  return { total: emp.pdTotal, usados, disp: Math.max(0, disp), vence };
+    .filter(t => t.cedula === emp.cedula && t.tipo === 'personalday' && t.status === 'approved')
+    .filter(t => t.fecha && t.fecha.startsWith(anio.toString()))
+    .reduce((s,t) => s + (parseFloat(t.details.dias) || 0), 0);
+  // pdUsados del empleado solo aplica si el histórico es del año actual
+  // (cada 1 de enero se ignora el histórico anterior)
+  const anioIngreso = parseInt(emp.ingreso.split('-')[0]);
+  const historico   = anio >= anioIngreso ? emp.pdUsados : 0;
+  const usados = Math.round((historico + usadosPortal) * 10) / 10;
+  const disp   = Math.max(0, Math.round((emp.pdTotal - usados) * 10) / 10);
+  const vence  = `${anio}-12-31`; // siempre vencen el 31/12 del año en curso
+  return { total: emp.pdTotal, usados, disp, vence, anio };
 }
 
 // ── DAYS COUNTER ──
@@ -978,15 +985,14 @@ function updateVacTab(){
     pdDispEl.textContent=pd.disp<=0?'0 ⚠️':pd.disp;
     pdDispEl.style.color=pd.disp<=0?'var(--red)':pd.disp===1?'var(--orange)':'var(--green)';
   }
-  // Mensaje de vencimiento para Jorge Soto
+  // Aviso vencimiento — aplica para todos (PD no acumulables, vencen 31/12)
   const venceMsg=document.getElementById('pdVenceMsg');
   if(venceMsg){
-    if(pd.vence){
-      venceMsg.style.display='block';
-      venceMsg.textContent=`⚠️ Sus Personal Days no son acumulables y vencen el ${fmt(pd.vence)}. Úselos antes de esa fecha.`;
-    } else {
-      venceMsg.style.display='none';
-    }
+    venceMsg.style.display='block';
+    const dispTxt = pd.disp <= 0
+      ? `Ya utilizó todos sus Personal Days de ${pd.anio}.`
+      : `Tiene <strong>${pd.disp}</strong> Personal Day(s) disponible(s). Vencen el <strong>31/12/${pd.anio}</strong> — no son acumulables.`;
+    venceMsg.innerHTML = `⚠️ ${dispTxt}`;
   }
 }
 
