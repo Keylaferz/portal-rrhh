@@ -4,7 +4,7 @@
    ══════════════════════════════════════════ */
 
 // ── CONFIG — pegue aquí su URL del GAS ──
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbyjKE7f4DXlVxBOmZHK6vGSYWQhONQgJkzuB-JslWP_89v-xhyuP74AjDYt8QiKC94w/exec';
+const GAS_URL = 'PEGUE_SU_URL_GAS_AQUI';
 
 // ── FERIADOS COSTA RICA ──
 function getCRHolidays(year) {
@@ -77,8 +77,8 @@ let currentUser   = null;
 let isAdmin       = false;
 let currentType   = null;
 let pendingTicket = null;
-let tickets       = JSON.parse(localStorage.getItem('hr_tickets')     || '[]');
-let expedientes   = JSON.parse(localStorage.getItem('hr_expedientes') || '{}');
+let tickets       = [];        // se carga desde Google Sheets
+let expedientes   = {};        // se carga desde Google Sheets
 let resolveData   = {};
 let editData      = {};
 let cancelData    = {};
@@ -95,8 +95,19 @@ const tid    = () => 'TKT-'+Date.now().toString().slice(-6);
 const tlabel = t => ({vacaciones:'🏖️ Vacaciones',incapacidad:'🏥 Incapacidad',cumpleanos:'🎂 Cumpleaños',personalday:'⭐ Personal Day',singoce:'📤 Día Sin Goce'}[t]||t);
 const slabel = s => ({pending:'⏳ En Proceso',inprogress:'🔄 En Gestión',approved:'✅ Aprobada',denied:'❌ Denegada',cancelled:'🚫 Cancelada'}[s]||s);
 const sbadge = s => `<span class="sb ${s||'pending'}">${slabel(s)}</span>`;
+// Guarda en Google Sheets vía GAS (localStorage solo como caché offline)
 const save    = () => localStorage.setItem('hr_tickets',JSON.stringify(tickets));
 const saveExp = () => localStorage.setItem('hr_expedientes',JSON.stringify(expedientes));
+
+// ── GAS API ──
+async function gasGet(params) {
+  if(!GAS_URL||GAS_URL==='PEGUE_SU_URL_GAS_AQUI') return null;
+  try {
+    const url = `${GAS_URL}?${new URLSearchParams(params)}`;
+    const res  = await fetch(url);
+    return await res.json();
+  } catch(e) { return null; }
+}
 const getField = (id,def='') => { const el=document.getElementById(id); return el?el.value:def; };
 const fmtMoney = v => v ? '₡ '+parseFloat(v).toLocaleString('es-CR') : '—';
 
@@ -138,6 +149,85 @@ function calcPD(emp){
   const usados = Math.round((historico + usadosPortal) * 10) / 10;
   const disp   = Math.max(0, Math.round((emp.pdTotal - usados) * 10) / 10);
   return { total: emp.pdTotal, usados, disp, anio };
+}
+
+// ══════════════════════════════
+// CARGA DE DATOS DESDE SHEETS
+// ══════════════════════════════
+async function loadUserData(cedula) {
+  showOverlay('Cargando sus datos...');
+  // Cargar tickets del colaborador
+  const resT = await gasGet({action:'getTickets', cedula});
+  if(resT && resT.ok && resT.data) {
+    tickets = resT.data.map(parseTicket);
+    save(); // caché local
+  } else {
+    // Fallback a localStorage si no hay conexión
+    tickets = JSON.parse(localStorage.getItem('hr_tickets')||'[]')
+      .filter(t=>t.cedula===cedula);
+  }
+  // Cargar expediente
+  const resE = await gasGet({action:'getExpediente', cedula});
+  if(resE && resE.ok && resE.data) {
+    expedientes[cedula] = resE.data;
+    saveExp();
+  } else {
+    expedientes = JSON.parse(localStorage.getItem('hr_expedientes')||'{}');
+  }
+  hideOverlay();
+}
+
+async function loadAllTickets() {
+  showOverlay('Cargando solicitudes...');
+  const resT = await gasGet({action:'getTickets'});
+  if(resT && resT.ok && resT.data) {
+    tickets = resT.data.map(parseTicket);
+    save();
+  } else {
+    tickets = JSON.parse(localStorage.getItem('hr_tickets')||'[]');
+  }
+  hideOverlay();
+}
+
+// Convierte fila plana del Sheet a objeto con details anidado
+function parseTicket(t) {
+  if(t.details) return t; // ya está parseado
+  return {
+    id:       t.id,
+    cedula:   t.cedula,
+    empleado: t.empleado,
+    puesto:   t.puesto,
+    tipo:     t.tipo,
+    status:   t.status,
+    fecha:    t.fecha,
+    obs:      t.obs,
+    notaAdmin:t.notaAdmin,
+    editCount:parseInt(t.editCount)||0,
+    resueltoFecha:    t.resueltoFecha,
+    fechaCancelacion: t.fechaCancelacion,
+    motivoCancelacion:t.motivoCancelacion,
+    motivoEdicion:    t.motivoEdicion,
+    ultimaEdicion:    t.ultimaEdicion,
+    details: {
+      inicio:   t.inicio,
+      fin:      t.fin,
+      dias:     parseFloat(t.dias)||0,
+      turno:    t.turno,
+      excluidos:parseInt(t.excluidos)||0,
+      tipo:     t.tipo_inc||'',
+      medico:   t.medico||'',
+      motivo:   t.motivo||'',
+    }
+  };
+}
+
+function showOverlay(msg) {
+  document.getElementById('sendingOverlay').classList.add('active');
+  const box = document.querySelector('.sending-title');
+  if(box) box.textContent = msg;
+}
+function hideOverlay() {
+  document.getElementById('sendingOverlay').classList.remove('active');
 }
 
 // ── DAYS COUNTER ──
@@ -196,19 +286,19 @@ function switchLoginTab(t,btn){
   document.getElementById('loginError').style.display='none';
 }
 
-function doLogin(){
+async function doLogin(){
   const v=document.getElementById('cedulaInput').value.trim().replace(/[-.\s]/g,'');
   const emp=EMPLOYEES.find(e=>e.cedula===v);
   const err=document.getElementById('loginError');
   if(!emp){err.style.display='block';err.textContent='⚠️ Cédula no encontrada.';return;}
   err.style.display='none';
   currentUser=emp; isAdmin=false;
-  tickets    =JSON.parse(localStorage.getItem('hr_tickets')    ||'[]');
-  expedientes=JSON.parse(localStorage.getItem('hr_expedientes')||'{}');
   show('appScreen');
   document.getElementById('userName').textContent  =emp.nombre.split(' ').slice(0,2).join(' ');
   document.getElementById('userCedula').textContent='Cédula: '+emp.cedula;
   document.getElementById('userAvatar').textContent=emp.nombre[0];
+  // Cargar datos desde Sheets
+  await loadUserData(emp.cedula);
   updateStats(); renderTickets(); updateVacTab(); renderExpView();
 }
 
@@ -229,12 +319,13 @@ function doAdminLogin(){
   }
 }
 
-function initAdmin(){
+async function initAdmin(){
   document.getElementById('loginError').style.display='none';
   isAdmin=true;
-  tickets    =JSON.parse(localStorage.getItem('hr_tickets')    ||'[]');
-  expedientes=JSON.parse(localStorage.getItem('hr_expedientes')||'{}');
   show('adminScreen');
+  document.getElementById('adminList').innerHTML='<div class="empty-state"><div class="empty-icon">⏳</div><div>Cargando solicitudes...</div></div>';
+  // Cargar todos los tickets desde Sheets
+  await loadAllTickets();
   populateEmpFilter(); renderAdmin();
   const sel=document.getElementById('expEmpSelect');
   sel.innerHTML='<option value="">— Seleccione un colaborador —</option>'+
@@ -263,10 +354,10 @@ function showTab(id,btn){
   document.querySelectorAll('#appScreen .tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
   if(btn) btn.classList.add('active');
-  if(id==='historial') {tickets=JSON.parse(localStorage.getItem('hr_tickets')||'[]');renderTickets();}
-  if(id==='desglose')  {tickets=JSON.parse(localStorage.getItem('hr_tickets')||'[]');updateVacTab();}
-  if(id==='expediente'){expedientes=JSON.parse(localStorage.getItem('hr_expedientes')||'{}');renderExpView();}
-  if(id==='historial_completo'){tickets=JSON.parse(localStorage.getItem('hr_tickets')||'[]');renderFullHistory();}
+  if(id==='historial') { loadUserData(currentUser.cedula).then(()=>{renderTickets();}); }
+  if(id==='desglose')  { updateVacTab(); }
+  if(id==='expediente'){ loadUserData(currentUser.cedula).then(()=>{renderExpView();}); }
+  if(id==='historial_completo'){ loadUserData(currentUser.cedula).then(()=>{renderFullHistory();}); }
 }
 
 function showAdminTab(id,btn){
@@ -379,8 +470,19 @@ function showPreview(t){
 
 async function confirmSend(){
   closeModal('emailModal');
-  tickets.push(pendingTicket); save();
   const t=pendingTicket;
+  showOverlay('Guardando solicitud...');
+  // Guardar en Google Sheets
+  const res = await callGAS({
+    action:'saveTicket',
+    id:t.id, cedula:t.cedula, empleado:t.empleado, puesto:t.puesto,
+    tipo:t.tipo, inicio:t.details.inicio, fin:t.details.fin,
+    dias:t.details.dias, turno:t.details.turno||'',
+    excluidos:t.details.excluidos||0, obs:t.obs||'', motivo:t.details.motivo||''
+  });
+  // Recargar tickets desde Sheets
+  await loadUserData(currentUser.cedula);
+  // Enviar correo
   await callGAS({
     action:'sendEmail',
     to: currentUser.email,
@@ -390,7 +492,7 @@ async function confirmSend(){
     observaciones:t.obs||'Ninguna',estado:'⏳ Pendiente de revisión',
     nota_admin:'Nueva solicitud recibida.',msg_extra:''
   });
-  toast('✅ Solicitud enviada',`Ticket ${t.id} · Notificación enviada`);
+  toast('✅ Solicitud enviada',`Ticket ${t.id} · Guardada en Sheets`);
   clearForm(); updateStats(); renderTickets(); pendingTicket=null;
 }
 
@@ -438,7 +540,14 @@ async function confirmEdit(){
   t.editCount=(t.editCount||0)+1;
   t.ultimaEdicion=new Date().toISOString();
   t.motivoEdicion=reason;
-  save(); closeModal('editModal');
+  closeModal('editModal');
+  // Actualizar en Google Sheets
+  await callGAS({
+    action:'updateTicket', id:t.id, empleado:t.empleado,
+    inicio:ini, fin, dias:days, turno,
+    editCount:t.editCount, ultimaEdicion:t.ultimaEdicion, motivoEdicion:reason
+  });
+  await loadUserData(currentUser.cedula);
   await callGAS({
     action:'sendEmail', to:currentUser.email,
     asunto:`[RRHH] Solicitud EDITADA — ${tlabel(t.tipo)} — ${t.empleado}`,
@@ -465,7 +574,14 @@ async function confirmCancel(){
   const t=tickets.find(t=>t.id===cancelData.ticketId); if(!t) return;
   const reason=getField('cancel-reason');
   t.status='cancelled'; t.motivoCancelacion=reason; t.fechaCancelacion=new Date().toISOString();
-  save(); closeModal('cancelModal');
+  closeModal('cancelModal');
+  // Actualizar en Google Sheets
+  await callGAS({
+    action:'updateTicket', id:t.id, empleado:t.empleado,
+    status:'cancelled', motivoCancelacion:reason,
+    fechaCancelacion:t.fechaCancelacion
+  });
+  await loadUserData(currentUser.cedula);
   await callGAS({
     action:'sendEmail', to:currentUser.email,
     asunto:`[RRHH] Solicitud CANCELADA — ${tlabel(t.tipo)} — ${t.empleado}`,
@@ -496,7 +612,7 @@ function resetFilters(){
 }
 
 function renderAdmin(){
-  tickets=JSON.parse(localStorage.getItem('hr_tickets')||'[]');
+  // tickets ya cargados desde Sheets en loadAllTickets()
   const fs=document.getElementById('filt-status').value;
   const ft=document.getElementById('filt-tipo').value;
   const fe=document.getElementById('filt-emp').value;
@@ -550,9 +666,11 @@ function renderAdmin(){
   }).join('');
 }
 
-function changeStatus(ticketId,ns){
+async function changeStatus(ticketId,ns){
   const t=tickets.find(t=>t.id===ticketId); if(!t) return;
-  t.status=ns; save(); renderAdmin();
+  await callGAS({action:'updateTicket', id:t.id, empleado:'Admin', status:ns});
+  await loadAllTickets();
+  renderAdmin();
   toast('🔄 Actualizado',`${t.id} → ${slabel(ns)}`);
 }
 
@@ -575,7 +693,13 @@ async function confirmResolve(){
   const nota=getField('resolveNote');
   const t=tickets.find(t=>t.id===ticketId); if(!t) return;
   t.status=action; t.notaAdmin=nota; t.resueltoFecha=new Date().toISOString();
-  save(); closeModal('resolveModal');
+  closeModal('resolveModal');
+  // Actualizar en Google Sheets
+  await callGAS({
+    action:'updateTicket', id:t.id, empleado:'Admin',
+    status:action, notaAdmin:nota, resueltoFecha:t.resueltoFecha
+  });
+  await loadAllTickets();
   const ia=action==='approved';
   const emp=EMPLOYEES.find(e=>e.cedula===t.cedula);
   await callGAS({
@@ -595,9 +719,13 @@ async function confirmResolve(){
 // ══════════════════════════════
 // ADMIN — Expedientes
 // ══════════════════════════════
-function loadExpAdmin(){
+async function loadExpAdmin(){
   const cedula=getField('expEmpSelect'); if(!cedula){alert('Seleccione un colaborador');return;}
   const emp=EMPLOYEES.find(e=>e.cedula===cedula); if(!emp) return;
+  showOverlay('Cargando expediente...');
+  const resE = await gasGet({action:'getExpediente', cedula});
+  if(resE && resE.ok && resE.data) { expedientes[cedula] = resE.data; saveExp(); }
+  hideOverlay();
   const exp=expedientes[cedula]||{};
   document.getElementById('expAdminForm').style.display='block';
   document.getElementById('expAdminName').textContent=`✏️ Editando: ${emp.nombre}`;
@@ -629,7 +757,7 @@ function loadExpAdmin(){
   document.getElementById('expAdminForm').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
-function saveExpAdmin(){
+async function saveExpAdmin(){
   const cedula=getField('exp-cedula'); if(!cedula) return;
   expedientes[cedula]={
     nombres:   getField('exp-nombres'),  ap1:      getField('exp-ap1'),
@@ -647,8 +775,10 @@ function saveExpAdmin(){
     updatedAt: new Date().toISOString()
   };
   saveExp();
-  // Sincronizar con GAS/Sheets
-  callGAS({action:'saveExpediente',...expedientes[cedula],cedula});
+  // Guardar en Google Sheets y confirmar
+  showOverlay('Guardando expediente...');
+  await callGAS({action:'saveExpediente',...expedientes[cedula],cedula});
+  hideOverlay();
   toast('💾 Expediente guardado',`${EMPLOYEES.find(e=>e.cedula===cedula)?.nombre||cedula}`);
   document.getElementById('expAdminForm').style.display='none';
   document.getElementById('expEmpSelect').value='';
@@ -699,7 +829,7 @@ function renderExpView(){
 // ══════════════════════════════
 function renderTickets(){
   if(!currentUser) return;
-  tickets=JSON.parse(localStorage.getItem('hr_tickets')||'[]');
+  // tickets ya cargados desde Sheets
   const mine=tickets.filter(t=>t.cedula===currentUser.cedula);
 
   // Poblar filtro de años
@@ -789,7 +919,7 @@ function downloadSelectedCSV(){
 // ══════════════════════════════
 function renderFullHistory(){
   if(!currentUser) return;
-  tickets=JSON.parse(localStorage.getItem('hr_tickets')||'[]');
+  // tickets ya cargados desde Sheets
   const mine=tickets.filter(t=>t.cedula===currentUser.cedula);
 
   const total     =mine.length;
@@ -942,7 +1072,7 @@ function downloadHistoryCSV(){
 // ══════════════════════════════
 function updateStats(){
   if(!currentUser) return;
-  tickets=JSON.parse(localStorage.getItem('hr_tickets')||'[]');
+  // tickets ya cargados desde Sheets
   const mine=tickets.filter(t=>t.cedula===currentUser.cedula);
   const vac=calcVac(currentUser);
   const pd =calcPD(currentUser);
