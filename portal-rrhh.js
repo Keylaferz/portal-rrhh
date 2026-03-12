@@ -4,7 +4,7 @@
    ══════════════════════════════════════════ */
 
 // ── CONFIG — pegue aquí su URL del GAS ──
-const GAS_URL = 'PEGUE_SU_URL_GAS_AQUI';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbyjKE7f4DXlVxBOmZHK6vGSYWQhONQgJkzuB-JslWP_89v-xhyuP74AjDYt8QiKC94w/exec';
 
 // ── FERIADOS COSTA RICA ──
 function getCRHolidays(year) {
