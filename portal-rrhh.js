@@ -323,15 +323,18 @@ function submitRequest(){
     details={inicio:ini,fin,dias:days,turno:getField('cum-turno'),excluidos:excluded.length};
   } else if(currentType==='personalday'){
     const pd=calcPD(currentUser);
+    const turno=getField('per-turno');
+    // Media mañana o media tarde = 0.5 días, día completo = días hábiles normales
+    const diasPD = (turno==='Media mañana'||turno==='Media tarde') ? 0.5 : days;
     if(pd.disp<=0){
       alert(`⚠️ Ya no tiene Personal Days disponibles este año.\nUsados: ${pd.usados} / ${pd.total}`);
       return;
     }
-    if(days>pd.disp){
-      const ok=confirm(`⚠️ Tiene ${pd.disp} Personal Day(s) disponible(s) y solicita ${days}.\n\n¿Desea continuar de todas formas?`);
+    if(diasPD>pd.disp){
+      const ok=confirm(`⚠️ Tiene ${pd.disp} Personal Day(s) disponible(s) y solicita ${diasPD}.\n\n¿Desea continuar de todas formas?`);
       if(!ok) return;
     }
-    details={inicio:ini,fin,dias:days,turno:getField('per-turno'),motivo:getField('per-mot'),excluidos:excluded.length};
+    details={inicio:ini,fin,dias:diasPD,turno,motivo:getField('per-mot'),excluidos:excluded.length};
   } else if(currentType==='singoce'){
     details={inicio:ini,fin,dias:days,turno:getField('sg-turno'),motivo:getField('sg-mot'),excluidos:excluded.length};
   }
