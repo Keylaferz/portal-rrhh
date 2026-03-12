@@ -61,6 +61,7 @@
       <div class="stat-card"><div class="stat-icon si-green">✅</div><div><div class="stat-val" id="statApro">0</div><div class="stat-lbl">Aprobadas</div></div></div>
       <div class="stat-card"><div class="stat-icon si-yellow">⏳</div><div><div class="stat-val" id="statPend">0</div><div class="stat-lbl">Pendientes</div></div></div>
       <div class="stat-card"><div class="stat-icon si-orange">🎂</div><div><div class="stat-val">1</div><div class="stat-lbl">Día cumpleaños</div></div></div>
+      <div class="stat-card"><div class="stat-icon si-purple">⭐</div><div><div class="stat-val" id="statPD">—</div><div class="stat-lbl">Personal Days disponibles</div></div></div>
     </div>
     <div class="tabs">
       <button class="tab-btn active"  onclick="showTab('nueva',this)">➕ Nueva</button>
@@ -213,6 +214,18 @@
           <div class="vac-card"><div class="vac-num" id="vacDisp">—</div><div class="vac-unit">días disponibles</div><div class="vac-lbl">Saldo actual</div></div>
         </div>
       </div>
+      <!-- Personal Days -->
+      <div class="card">
+        <h2 class="card-title">⭐ Mis Personal Days</h2>
+        <p class="card-sub">3 Personal Days por año · Se rebajan solo al aprobarse</p>
+        <div class="vac-grid" id="pdGrid">
+          <div class="vac-card"><div class="vac-num" id="pdTotal">3</div><div class="vac-unit">por año</div><div class="vac-lbl">Total asignados</div></div>
+          <div class="vac-card"><div class="vac-num" id="pdUsados" style="color:var(--orange)">—</div><div class="vac-unit">utilizados</div><div class="vac-lbl">Histórico + portal</div></div>
+          <div class="vac-card"><div class="vac-num" id="pdDisp">—</div><div class="vac-unit">disponibles</div><div class="vac-lbl">Saldo actual</div></div>
+        </div>
+        <div id="pdVenceMsg" style="display:none;margin-top:10px;" class="warn-box"></div>
+      </div>
+
       <div class="card">
         <h2 class="card-title" style="font-size:16px">Reglamento — Puntos clave</h2>
         <ul class="rules-list">

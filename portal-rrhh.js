@@ -2,10 +2,10 @@
    Portal RRHH — Lean Consulting S.A.
    JavaScript principal
    ══════════════════════════════════════════ */
- 
+
 // ── CONFIG — pegue aquí su URL del GAS ──
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbyjKE7f4DXlVxBOmZHK6vGSYWQhONQgJkzuB-JslWP_89v-xhyuP74AjDYt8QiKC94w/exec';
- 
+const GAS_URL = 'PEGUE_SU_URL_GAS_AQUI';
+
 // ── FERIADOS COSTA RICA ──
 function getCRHolidays(year) {
   const fixed = [
@@ -46,27 +46,30 @@ function countWorkdays(ini,fin,bdayStr){
   }
   return {days,excluded};
 }
- 
+
 // ── EMPLOYEES ──
+// pdTotal = Personal Days totales por año (3 para todos)
+// pdUsados = Personal Days ya usados antes del portal (histórico)
+// Jorge Soto: sus 3 PD no acumulan, vencen el 31/12/2026
 const EMPLOYEES = [
-  {cedula:'111840112',nombre:'Cristiana María Echandi Montero',   puesto:'Project Manager',            ingreso:'2019-10-01',consumidos:64,  email:'cechandi@leancr.com'},
-  {cedula:'116270838',nombre:'Alfonso Salomón Segura Salazar',    puesto:'Project Engineer',            ingreso:'2019-10-01',consumidos:57,  email:'asegura@leancr.com'},
-  {cedula:'111320139',nombre:'Cristián Fernández Cardos',         puesto:'Gerente General',             ingreso:'2019-10-01',consumidos:80,  email:'cfernandez@leancr.com'},
-  {cedula:'305210209',nombre:'Sugey Elizabeth Mora Ureña',        puesto:'Project Engineer',            ingreso:'2022-09-15',consumidos:26,  email:'smora@leancr.com'},
-  {cedula:'115420183',nombre:'Edgard Allan Solís Chaverri',       puesto:'Project Manager',             ingreso:'2022-10-03',consumidos:21,  email:'asolis@leancr.com'},
-  {cedula:'114230764',nombre:'Carlos Andrés Gutiérrez Garbanzo',  puesto:'Project Engineer',            ingreso:'2023-02-01',consumidos:23,  email:'cgutierrez@leancr.com'},
-  {cedula:'117730278',nombre:'Maron Yanin Arrieta Hernández',     puesto:'Project Engineer',            ingreso:'2023-05-15',consumidos:24,  email:'marrieta@leancr.com'},
-  {cedula:'115780240',nombre:'Nicole Alexandra Cajina Cruz',      puesto:'Project Engineer',            ingreso:'2023-06-15',consumidos:25,  email:'ncajina@leancr.com'},
-  {cedula:'115570313',nombre:'Héctor Esteban Ureña Marín',        puesto:'Asistente Administrativo',    ingreso:'2024-02-26',consumidos:16,  email:'hurena@leancr.com'},
-  {cedula:'117870532',nombre:'María Fernanda Zeledón Barrios',    puesto:'Document Controller',         ingreso:'2024-03-18',consumidos:15,  email:'mzeledon@leancr.com'},
-  {cedula:'305130742',nombre:'Santiago Hernán Brenes Aguilar',    puesto:'Project Controller',          ingreso:'2024-04-01',consumidos:15,  email:'sbrenes@leancr.com'},
-  {cedula:'115840947',nombre:'Jesús Andrés Valverde Chaves',      puesto:'Site Construction Engineer',  ingreso:'2024-04-15',consumidos:12,  email:'avalverde@leancr.com'},
-  {cedula:'116700149',nombre:'Jorge Soto Badilla',                puesto:'MEP Engineer',                ingreso:'2024-09-09',consumidos:15,  email:'jsoto@leancr.com'},
-  {cedula:'117610198',nombre:'Keila Fernández Sandí',             puesto:'Coordinadora Administrativa', ingreso:'2025-03-03',consumidos:5.5, email:'kfernandez@leancr.com'},
-  {cedula:'206160552',nombre:'Oscar Salazar Corrales',            puesto:'Ingeniero en Electrónica',    ingreso:'2025-06-09',consumidos:4,   email:'osalazar@leancr.com'},
-  {cedula:'303840620',nombre:'Humberto José Navarro Guzmán',      puesto:'Director de Proyectos',       ingreso:'2025-11-24',consumidos:6,   email:'hnavarro@leancr.com'},
+  {cedula:'111840112',nombre:'Cristiana María Echandi Montero',   puesto:'Project Manager',            ingreso:'2019-10-01',consumidos:64,  email:'cechandi@leancr.com',  pdTotal:3, pdUsados:0},
+  {cedula:'116270838',nombre:'Alfonso Salomón Segura Salazar',    puesto:'Project Engineer',            ingreso:'2019-10-01',consumidos:57,  email:'asegura@leancr.com',   pdTotal:3, pdUsados:0},
+  {cedula:'111320139',nombre:'Cristián Fernández Cardos',         puesto:'Gerente General',             ingreso:'2019-10-01',consumidos:80,  email:'cfernandez@leancr.com',pdTotal:3, pdUsados:0},
+  {cedula:'305210209',nombre:'Sugey Elizabeth Mora Ureña',        puesto:'Project Engineer',            ingreso:'2022-09-15',consumidos:26,  email:'smora@leancr.com',     pdTotal:3, pdUsados:0.5},
+  {cedula:'115420183',nombre:'Edgard Allan Solís Chaverri',       puesto:'Project Manager',             ingreso:'2022-10-03',consumidos:21,  email:'asolis@leancr.com',    pdTotal:3, pdUsados:0},
+  {cedula:'114230764',nombre:'Carlos Andrés Gutiérrez Garbanzo',  puesto:'Project Engineer',            ingreso:'2023-02-01',consumidos:23,  email:'cgutierrez@leancr.com',pdTotal:3, pdUsados:3},
+  {cedula:'117730278',nombre:'Maron Yanin Arrieta Hernández',     puesto:'Project Engineer',            ingreso:'2023-05-15',consumidos:24,  email:'marrieta@leancr.com',  pdTotal:3, pdUsados:2},
+  {cedula:'115780240',nombre:'Nicole Alexandra Cajina Cruz',      puesto:'Project Engineer',            ingreso:'2023-06-15',consumidos:25,  email:'ncajina@leancr.com',   pdTotal:3, pdUsados:0},
+  {cedula:'115570313',nombre:'Héctor Esteban Ureña Marín',        puesto:'Asistente Administrativo',    ingreso:'2024-02-26',consumidos:16,  email:'hurena@leancr.com',    pdTotal:3, pdUsados:0},
+  {cedula:'117870532',nombre:'María Fernanda Zeledón Barrios',    puesto:'Document Controller',         ingreso:'2024-03-18',consumidos:15,  email:'mzeledon@leancr.com',  pdTotal:3, pdUsados:1},
+  {cedula:'305130742',nombre:'Santiago Hernán Brenes Aguilar',    puesto:'Project Controller',          ingreso:'2024-04-01',consumidos:15,  email:'sbrenes@leancr.com',   pdTotal:3, pdUsados:0},
+  {cedula:'115840947',nombre:'Jesús Andrés Valverde Chaves',      puesto:'Site Construction Engineer',  ingreso:'2024-04-15',consumidos:12,  email:'avalverde@leancr.com', pdTotal:3, pdUsados:1},
+  {cedula:'116700149',nombre:'Jorge Soto Badilla',                puesto:'MEP Engineer',                ingreso:'2024-09-09',consumidos:15,  email:'jsoto@leancr.com',     pdTotal:3, pdUsados:0, pdVence:'2026-12-31'},
+  {cedula:'117610198',nombre:'Keila Fernández Sandí',             puesto:'Coordinadora Administrativa', ingreso:'2025-03-03',consumidos:5.5, email:'kfernandez@leancr.com',pdTotal:3, pdUsados:1},
+  {cedula:'206160552',nombre:'Oscar Salazar Corrales',            puesto:'Ingeniero en Electrónica',    ingreso:'2025-06-09',consumidos:4,   email:'osalazar@leancr.com',  pdTotal:3, pdUsados:0},
+  {cedula:'303840620',nombre:'Humberto José Navarro Guzmán',      puesto:'Director de Proyectos',       ingreso:'2025-11-24',consumidos:6,   email:'hnavarro@leancr.com',  pdTotal:3, pdUsados:0},
 ];
- 
+
 // ── STATE ──
 let currentUser   = null;
 let isAdmin       = false;
@@ -78,7 +81,7 @@ let resolveData   = {};
 let editData      = {};
 let cancelData    = {};
 let selectedTickets = new Set();
- 
+
 // ── HELPERS ──
 const fmt = d => {
   if(!d) return '—';
@@ -94,11 +97,11 @@ const save    = () => localStorage.setItem('hr_tickets',JSON.stringify(tickets))
 const saveExp = () => localStorage.setItem('hr_expedientes',JSON.stringify(expedientes));
 const getField = (id,def='') => { const el=document.getElementById(id); return el?el.value:def; };
 const fmtMoney = v => v ? '₡ '+parseFloat(v).toLocaleString('es-CR') : '—';
- 
+
 function getEmpBirthday(emp){
   const exp=expedientes[emp.cedula]; return exp?(exp.fnac||''):'';
 }
- 
+
 function calcVac(emp){
   const hoy=new Date(),ini=new Date(emp.ingreso);
   let m=(hoy.getFullYear()-ini.getFullYear())*12+(hoy.getMonth()-ini.getMonth());
@@ -108,13 +111,28 @@ function calcVac(emp){
   const im=new Date(hoy.getFullYear(),hoy.getMonth(),ini.getDate());
   const f=hoy>=im?Math.min((hoy-im)/(dm*864e5),1):0;
   const acum=Math.floor(m+f);
-  const ep=tickets.filter(t=>t.cedula===emp.cedula&&t.tipo==='vacaciones'&&['approved','inprogress','pending'].includes(t.status)).reduce((s,t)=>s+(t.details.dias||0),0);
+  // Solo se descuentan vacaciones APROBADAS (no pendientes ni en gestión)
+  const ep=tickets.filter(t=>t.cedula===emp.cedula&&t.tipo==='vacaciones'&&t.status==='approved').reduce((s,t)=>s+(t.details.dias||0),0);
   const u=Math.round((emp.consumidos+ep)*10)/10;
   const disp=Math.floor(acum-u);
   const prox=new Date(hoy.getFullYear(),hoy.getMonth()+1,ini.getDate());
   return{meses:m,acum,usados:u,disp,pct:Math.min(100,Math.round((u/Math.max(acum,1))*100)),prox};
 }
- 
+
+// ── PERSONAL DAYS ──
+function calcPD(emp){
+  const anio = new Date().getFullYear();
+  // Solo se descuentan PD APROBADOS del año actual
+  const usadosPortal = tickets
+    .filter(t=>t.cedula===emp.cedula && t.tipo==='personalday' && t.status==='approved')
+    .filter(t=>t.fecha && t.fecha.startsWith(anio.toString()))
+    .reduce((s,t)=>s+(parseFloat(t.details.dias)||0),0);
+  const usados = Math.round((emp.pdUsados + usadosPortal)*10)/10;
+  const disp   = Math.round((emp.pdTotal - usados)*10)/10;
+  const vence  = emp.pdVence || null;
+  return { total: emp.pdTotal, usados, disp: Math.max(0, disp), vence };
+}
+
 // ── DAYS COUNTER ──
 const typeFields={
   vacaciones: {ini:'vac-ini',fin:'vac-fin'},
@@ -123,7 +141,7 @@ const typeFields={
   personalday:{ini:'per-ini',fin:'per-fin'},
   singoce:    {ini:'sg-ini', fin:'sg-fin'},
 };
- 
+
 function calcDays(tipo){
   const f=typeFields[tipo]; if(!f) return;
   const ini=getField(f.ini),fin=getField(f.fin);
@@ -142,7 +160,7 @@ function calcDays(tipo){
   exclEl.textContent=parts.length?`Excluidos: ${parts.join(', ')}` :'';
   if(ctr)ctr.style.display='flex';
 }
- 
+
 function calcEditDays(){
   const ini=getField('edit-ini'),fin=getField('edit-fin');
   const ctr=document.getElementById('edit-days-counter');
@@ -159,7 +177,7 @@ function calcEditDays(){
   document.getElementById('edit-days-excl').textContent=parts.length?`Excluidos: ${parts.join(', ')}`:'';
   ctr.style.display='flex';
 }
- 
+
 // ══════════════════════════════
 // AUTH
 // ══════════════════════════════
@@ -170,7 +188,7 @@ function switchLoginTab(t,btn){
   document.getElementById('adminLogin').style.display =t==='admin'?'block':'none';
   document.getElementById('loginError').style.display='none';
 }
- 
+
 function doLogin(){
   const v=document.getElementById('cedulaInput').value.trim().replace(/[-.\s]/g,'');
   const emp=EMPLOYEES.find(e=>e.cedula===v);
@@ -186,7 +204,7 @@ function doLogin(){
   document.getElementById('userAvatar').textContent=emp.nombre[0];
   updateStats(); renderTickets(); updateVacTab(); renderExpView();
 }
- 
+
 function doAdminLogin(){
   const u=document.getElementById('adminUser').value.trim();
   const p=document.getElementById('adminPass').value;
@@ -203,7 +221,7 @@ function doAdminLogin(){
     else { err.style.display='block'; err.textContent='⚠️ Credenciales incorrectas.'; }
   }
 }
- 
+
 function initAdmin(){
   document.getElementById('loginError').style.display='none';
   isAdmin=true;
@@ -215,7 +233,7 @@ function initAdmin(){
   sel.innerHTML='<option value="">— Seleccione un colaborador —</option>'+
     EMPLOYEES.map(e=>`<option value="${e.cedula}">${e.nombre}</option>`).join('');
 }
- 
+
 function doLogout(){
   currentUser=null; isAdmin=false; currentType=null;
   show('loginScreen');
@@ -224,12 +242,12 @@ function doLogout(){
   document.getElementById('adminPass').value='';
   clearForm();
 }
- 
+
 function show(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
 }
- 
+
 // ══════════════════════════════
 // TABS
 // ══════════════════════════════
@@ -243,14 +261,14 @@ function showTab(id,btn){
   if(id==='expediente'){expedientes=JSON.parse(localStorage.getItem('hr_expedientes')||'{}');renderExpView();}
   if(id==='historial_completo'){tickets=JSON.parse(localStorage.getItem('hr_tickets')||'[]');renderFullHistory();}
 }
- 
+
 function showAdminTab(id,btn){
   document.querySelectorAll('#adminScreen .tab-panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('#adminScreen .tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('admin-tab-'+id).classList.add('active');
   if(btn) btn.classList.add('active');
 }
- 
+
 // ══════════════════════════════
 // FORM
 // ══════════════════════════════
@@ -263,7 +281,7 @@ function selType(t){
   document.getElementById('fields-'+t).style.display='block';
   document.getElementById('formFields').style.display='block';
 }
- 
+
 function clearForm(){
   currentType=null;
   document.querySelectorAll('.req-type').forEach(b=>b.classList.remove('sel'));
@@ -272,7 +290,7 @@ function clearForm(){
   document.getElementById('formFields').style.display='none';
   document.getElementById('obs').value='';
 }
- 
+
 function submitRequest(){
   if(!currentType){alert('Seleccione un tipo de solicitud');return;}
   const obs=getField('obs');
@@ -283,22 +301,35 @@ function submitRequest(){
   if(fin<ini){alert('La fecha fin no puede ser anterior al inicio');return;}
   const{days,excluded}=countWorkdays(ini,fin,bday);
   if(days===0){alert('El rango no contiene días hábiles.');return;}
- 
+
   let details={};
   if(currentType==='vacaciones'){
     const vac=calcVac(currentUser);
-    if(days>vac.disp){alert(`Solo tiene ${vac.disp} días disponibles. Solicita ${days}.`);return;}
+    // Advertir si no hay saldo suficiente pero aun permite enviar (admin decide)
+    if(days>vac.disp){
+      const ok=confirm(`⚠️ Atención: tiene ${vac.disp} día(s) disponibles aprobados y solicita ${days}.\n\nPuede enviar la solicitud y RRHH la revisará.\n\n¿Desea continuar?`);
+      if(!ok) return;
+    }
     details={inicio:ini,fin,dias:days,turno:getField('vac-mod'),excluidos:excluded.length};
   } else if(currentType==='incapacidad'){
     details={inicio:ini,fin,dias:days,tipo:getField('inc-tipo'),medico:getField('inc-med'),turno:getField('inc-turno'),excluidos:excluded.length};
   } else if(currentType==='cumpleanos'){
     details={inicio:ini,fin,dias:days,turno:getField('cum-turno'),excluidos:excluded.length};
   } else if(currentType==='personalday'){
+    const pd=calcPD(currentUser);
+    if(pd.disp<=0){
+      alert(`⚠️ Ya no tiene Personal Days disponibles este año.\nUsados: ${pd.usados} / ${pd.total}`);
+      return;
+    }
+    if(days>pd.disp){
+      const ok=confirm(`⚠️ Tiene ${pd.disp} Personal Day(s) disponible(s) y solicita ${days}.\n\n¿Desea continuar de todas formas?`);
+      if(!ok) return;
+    }
     details={inicio:ini,fin,dias:days,turno:getField('per-turno'),motivo:getField('per-mot'),excluidos:excluded.length};
   } else if(currentType==='singoce'){
     details={inicio:ini,fin,dias:days,turno:getField('sg-turno'),motivo:getField('sg-mot'),excluidos:excluded.length};
   }
- 
+
   pendingTicket={
     id:tid(),tipo:currentType,status:'pending',
     fecha:new Date().toISOString().split('T')[0],
@@ -307,7 +338,7 @@ function submitRequest(){
   };
   showPreview(pendingTicket);
 }
- 
+
 // ══════════════════════════════
 // EMAIL
 // ══════════════════════════════
@@ -321,7 +352,7 @@ function buildDet(t){
   if(t.tipo==='singoce')     s+=`\nMotivo: ${d.motivo||''}\n⚠️ No descuenta vacaciones, sí descuenta salario.`;
   return s;
 }
- 
+
 function showPreview(t){
   document.getElementById('emailPreview').innerHTML=`
     <span class="ef">Asunto:</span> [RRHH] Nueva solicitud — ${tlabel(t.tipo)} — ${t.empleado}<br>
@@ -335,7 +366,7 @@ function showPreview(t){
     <span class="ef">💬</span> ${t.obs||'Sin observaciones'}`;
   openModal('emailModal');
 }
- 
+
 async function confirmSend(){
   closeModal('emailModal');
   tickets.push(pendingTicket); save();
@@ -352,7 +383,7 @@ async function confirmSend(){
   toast('✅ Solicitud enviada',`Ticket ${t.id} · Notificación enviada`);
   clearForm(); updateStats(); renderTickets(); pendingTicket=null;
 }
- 
+
 async function callGAS(params){
   if(!GAS_URL||GAS_URL==='PEGUE_SU_URL_GAS_AQUI') return null;
   document.getElementById('sendingOverlay').classList.add('active');
@@ -367,7 +398,7 @@ async function callGAS(params){
     return null;
   }
 }
- 
+
 // ══════════════════════════════
 // EDITAR / CANCELAR
 // ══════════════════════════════
@@ -385,7 +416,7 @@ function openEdit(ticketId){
   calcEditDays();
   openModal('editModal');
 }
- 
+
 async function confirmEdit(){
   const t=tickets.find(t=>t.id===editData.ticketId); if(!t) return;
   const ini=getField('edit-ini'),fin=getField('edit-fin');
@@ -410,7 +441,7 @@ async function confirmEdit(){
   toast('✏️ Editada',`${t.id} · Edición ${t.editCount}/2`);
   renderTickets(); updateStats();
 }
- 
+
 function openCancelReq(ticketId){
   const t=tickets.find(t=>t.id===ticketId); if(!t) return;
   cancelData={ticketId};
@@ -419,7 +450,7 @@ function openCancelReq(ticketId){
   document.getElementById('cancel-reason').value='';
   openModal('cancelModal');
 }
- 
+
 async function confirmCancel(){
   const t=tickets.find(t=>t.id===cancelData.ticketId); if(!t) return;
   const reason=getField('cancel-reason');
@@ -438,7 +469,7 @@ async function confirmCancel(){
   toast('🚫 Cancelada',`${t.id} · Notificaciones enviadas`);
   renderTickets(); updateStats();
 }
- 
+
 // ══════════════════════════════
 // ADMIN — Solicitudes
 // ══════════════════════════════
@@ -448,12 +479,12 @@ function populateEmpFilter(){
   sel.innerHTML='<option value="">Todos los empleados</option>'+
     names.map(n=>`<option value="${n}">${n}</option>`).join('');
 }
- 
+
 function resetFilters(){
   ['filt-status','filt-tipo','filt-emp'].forEach(id=>document.getElementById(id).value='');
   renderAdmin();
 }
- 
+
 function renderAdmin(){
   tickets=JSON.parse(localStorage.getItem('hr_tickets')||'[]');
   const fs=document.getElementById('filt-status').value;
@@ -463,13 +494,13 @@ function renderAdmin(){
   if(fs) list=list.filter(t=>t.status===fs);
   if(ft) list=list.filter(t=>t.tipo===ft);
   if(fe) list=list.filter(t=>t.empleado===fe);
- 
+
   document.getElementById('adm-pend').textContent =tickets.filter(t=>t.status==='pending').length;
   document.getElementById('adm-proc').textContent =tickets.filter(t=>t.status==='inprogress').length;
   document.getElementById('adm-apro').textContent =tickets.filter(t=>t.status==='approved').length;
   document.getElementById('adm-deny').textContent =tickets.filter(t=>t.status==='denied').length;
   document.getElementById('adm-total').textContent=tickets.length;
- 
+
   const el=document.getElementById('adminList');
   if(!list.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div>No hay solicitudes con esos filtros</div></div>';return;}
   el.innerHTML=list.map(t=>{
@@ -508,13 +539,13 @@ function renderAdmin(){
     </div>`;
   }).join('');
 }
- 
+
 function changeStatus(ticketId,ns){
   const t=tickets.find(t=>t.id===ticketId); if(!t) return;
   t.status=ns; save(); renderAdmin();
   toast('🔄 Actualizado',`${t.id} → ${slabel(ns)}`);
 }
- 
+
 function openResolve(ticketId,action){
   resolveData={ticketId,action};
   const t=tickets.find(t=>t.id===ticketId);
@@ -528,7 +559,7 @@ function openResolve(ticketId,action){
   btn.style.background=ia?'linear-gradient(135deg,#10B981,#059669)':'linear-gradient(135deg,#EF4444,#DC2626)';
   openModal('resolveModal');
 }
- 
+
 async function confirmResolve(){
   const{ticketId,action}=resolveData;
   const nota=getField('resolveNote');
@@ -550,7 +581,7 @@ async function confirmResolve(){
   toast(ia?'✅ Aprobada':'❌ Denegada',`${t.id} · Notificaciones enviadas`);
   renderAdmin();
 }
- 
+
 // ══════════════════════════════
 // ADMIN — Expedientes
 // ══════════════════════════════
@@ -587,7 +618,7 @@ function loadExpAdmin(){
   set('exp-alergias', exp.alergias ||'');
   document.getElementById('expAdminForm').scrollIntoView({behavior:'smooth',block:'start'});
 }
- 
+
 function saveExpAdmin(){
   const cedula=getField('exp-cedula'); if(!cedula) return;
   expedientes[cedula]={
@@ -612,7 +643,7 @@ function saveExpAdmin(){
   document.getElementById('expAdminForm').style.display='none';
   document.getElementById('expEmpSelect').value='';
 }
- 
+
 // ══════════════════════════════
 // EMPLOYEE — Expediente view
 // ══════════════════════════════
@@ -652,7 +683,7 @@ function renderExpView(){
     <div class="exp-grid">${field('Medicamentos',exp.meds)}${field('Alergias',exp.alergias)}</div>
     <p style="font-size:11px;color:var(--g400);margin-top:14px;text-align:right">Última actualización: ${exp.updatedAt?fmt(exp.updatedAt.split('T')[0]):'—'}</p>`;
 }
- 
+
 // ══════════════════════════════
 // MIS SOLICITUDES — con filtro año y descarga
 // ══════════════════════════════
@@ -660,7 +691,7 @@ function renderTickets(){
   if(!currentUser) return;
   tickets=JSON.parse(localStorage.getItem('hr_tickets')||'[]');
   const mine=tickets.filter(t=>t.cedula===currentUser.cedula);
- 
+
   // Poblar filtro de años
   const years=[...new Set(mine.map(t=>t.fecha.split('-')[0]))].sort().reverse();
   const yearSel=document.getElementById('filt-year');
@@ -668,20 +699,20 @@ function renderTickets(){
     const cur=yearSel.value;
     yearSel.innerHTML='<option value="">Todos los años</option>'+years.map(y=>`<option value="${y}" ${y===cur?'selected':''}>${y}</option>`).join('');
   }
- 
+
   // Aplicar filtros
   const fy=yearSel?yearSel.value:'';
   const ft=document.getElementById('filt-tipo-emp')?document.getElementById('filt-tipo-emp').value:'';
   let filtered=[...mine].reverse();
   if(fy) filtered=filtered.filter(t=>t.fecha.startsWith(fy));
   if(ft) filtered=filtered.filter(t=>t.tipo===ft);
- 
+
   const el=document.getElementById('ticketsList');
   if(!filtered.length){
     el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div>No hay solicitudes con esos filtros</div></div>';
     return;
   }
- 
+
   el.innerHTML=filtered.map(t=>{
     const canEdit  =['pending','inprogress'].includes(t.status)&&(t.editCount||0)<2;
     const canCancel=['pending','inprogress'].includes(t.status);
@@ -718,31 +749,31 @@ function renderTickets(){
     </div>`;
   }).join('');
 }
- 
+
 function toggleTicketSelect(id,checked){
   checked?selectedTickets.add(id):selectedTickets.delete(id);
   document.getElementById('selCount').textContent=selectedTickets.size>0?`${selectedTickets.size} seleccionada(s)`:'';
 }
- 
+
 function selectAllTickets(){
   document.querySelectorAll('.ticket-check').forEach(cb=>{cb.checked=true;selectedTickets.add(cb.value);});
   document.getElementById('selCount').textContent=`${selectedTickets.size} seleccionada(s)`;
 }
- 
+
 function downloadSelectedPDF(){
   const ids=selectedTickets.size>0?[...selectedTickets]:tickets.filter(t=>t.cedula===currentUser.cedula).map(t=>t.id);
   const sel=tickets.filter(t=>ids.includes(t.id));
   if(!sel.length){alert('No hay solicitudes para descargar');return;}
   downloadTicketsPDF(sel,`Mis Solicitudes — ${currentUser.nombre}`);
 }
- 
+
 function downloadSelectedCSV(){
   const ids=selectedTickets.size>0?[...selectedTickets]:tickets.filter(t=>t.cedula===currentUser.cedula).map(t=>t.id);
   const sel=tickets.filter(t=>ids.includes(t.id));
   if(!sel.length){alert('No hay solicitudes para descargar');return;}
   downloadTicketsCSV(sel,`solicitudes_${currentUser.cedula}`);
 }
- 
+
 // ══════════════════════════════
 // HISTORIAL COMPLETO (nueva pestaña)
 // ══════════════════════════════
@@ -750,7 +781,7 @@ function renderFullHistory(){
   if(!currentUser) return;
   tickets=JSON.parse(localStorage.getItem('hr_tickets')||'[]');
   const mine=tickets.filter(t=>t.cedula===currentUser.cedula);
- 
+
   const total     =mine.length;
   const aprobadas =mine.filter(t=>t.status==='approved').length;
   const denegadas =mine.filter(t=>t.status==='denied').length;
@@ -758,7 +789,7 @@ function renderFullHistory(){
   const editadas  =mine.filter(t=>(t.editCount||0)>0).length;
   const pendientes=mine.filter(t=>['pending','inprogress'].includes(t.status)).length;
   const diasUsados=mine.filter(t=>t.status==='approved'&&t.tipo==='vacaciones').reduce((s,t)=>s+(t.details.dias||0),0);
- 
+
   const el=document.getElementById('historialCompleto');
   el.innerHTML=`
     <!-- Resumen estadístico -->
@@ -770,7 +801,7 @@ function renderFullHistory(){
       <div class="stat-card"><div class="stat-icon si-orange">✏️</div><div><div class="stat-val">${editadas}</div><div class="stat-lbl">Con ediciones</div></div></div>
       <div class="stat-card"><div class="stat-icon si-blue">🏖️</div><div><div class="stat-val">${diasUsados}</div><div class="stat-lbl">Días vacaciones aprobados</div></div></div>
     </div>
- 
+
     <!-- Desglose por tipo -->
     <div class="card" style="margin-bottom:14px">
       <h3 class="card-title" style="font-size:16px">📊 Desglose por tipo</h3>
@@ -800,7 +831,7 @@ function renderFullHistory(){
         </tbody>
       </table>
     </div>
- 
+
     <!-- Línea de tiempo -->
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
@@ -834,7 +865,7 @@ function renderFullHistory(){
       </div>
     </div>`;
 }
- 
+
 // ══════════════════════════════
 // DESCARGAS — PDF y CSV
 // ══════════════════════════════
@@ -849,7 +880,7 @@ function downloadTicketsPDF(list, titulo){
       <td style="padding:8px;font-size:12px">${fmt(t.fecha)}</td>
       <td style="padding:8px;font-size:12px">${t.notaAdmin||'—'}</td>
     </tr>`).join('');
- 
+
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
   <style>body{font-family:Arial,sans-serif;padding:32px;color:#1e293b}
   h1{color:#1D4ED8;font-size:20px} h2{color:#475569;font-size:14px;font-weight:400;margin-top:4px}
@@ -866,13 +897,13 @@ function downloadTicketsPDF(list, titulo){
   </tr></thead><tbody>${rows}</tbody></table>
   <div class="footer">© 2026 Lean Consulting S.A. — Portal de Recursos Humanos — Documento generado automáticamente</div>
   </body></html>`;
- 
+
   const w=window.open('','_blank');
   w.document.write(html);
   w.document.close();
   w.print();
 }
- 
+
 function downloadTicketsCSV(list, filename){
   const header='Ticket,Tipo,Empleado,Puesto,Inicio,Fin,Días,Turno,Estado,Fecha solicitud,Nota RRHH,Observaciones\n';
   const rows=list.map(t=>[
@@ -885,17 +916,17 @@ function downloadTicketsCSV(list, filename){
   a.download=`${filename}_${new Date().toISOString().split('T')[0]}.csv`;
   a.click();
 }
- 
+
 function downloadHistoryPDF(){
   const mine=tickets.filter(t=>t.cedula===currentUser.cedula);
   downloadTicketsPDF(mine,`Historial completo — ${currentUser.nombre}`);
 }
- 
+
 function downloadHistoryCSV(){
   const mine=tickets.filter(t=>t.cedula===currentUser.cedula);
   downloadTicketsCSV(mine,`historial_${currentUser.cedula}`);
 }
- 
+
 // ══════════════════════════════
 // DESGLOSE VACACIONES
 // ══════════════════════════════
@@ -904,16 +935,26 @@ function updateStats(){
   tickets=JSON.parse(localStorage.getItem('hr_tickets')||'[]');
   const mine=tickets.filter(t=>t.cedula===currentUser.cedula);
   const vac=calcVac(currentUser);
+  const pd =calcPD(currentUser);
   const dEl=document.getElementById('statVac');
   dEl.textContent=vac.disp<0?vac.disp+' ⚠️':vac.disp;
   dEl.style.color=vac.disp<0?'var(--red)':vac.disp<=3?'var(--orange)':'var(--g800)';
   document.getElementById('statApro').textContent=mine.filter(t=>t.status==='approved').length;
   document.getElementById('statPend').textContent=mine.filter(t=>['pending','inprogress'].includes(t.status)).length;
+  // Personal Days
+  const pdEl=document.getElementById('statPD');
+  if(pdEl){
+    pdEl.textContent=pd.disp<=0?'0 ⚠️':pd.disp;
+    pdEl.style.color=pd.disp<=0?'var(--red)':pd.disp===1?'var(--orange)':'var(--g800)';
+  }
 }
- 
+
 function updateVacTab(){
   if(!currentUser) return;
   const v=calcVac(currentUser);
+  const pd=calcPD(currentUser);
+
+  // Vacaciones
   document.getElementById('vacIngreso').textContent=fmt(currentUser.ingreso);
   document.getElementById('vacMeses').textContent=v.meses;
   document.getElementById('vacAcum').textContent=v.acum;
@@ -926,14 +967,35 @@ function updateVacTab(){
   prog.style.background=v.pct>=100?'linear-gradient(90deg,var(--orange),var(--red))':
     v.pct>=80?'linear-gradient(90deg,var(--orange),#F59E0B)':'linear-gradient(90deg,var(--b400),var(--b600))';
   document.getElementById('vacProx').textContent=fmt(v.prox);
+
+  // Personal Days
+  const pdTotalEl =document.getElementById('pdTotal');
+  const pdUsadosEl=document.getElementById('pdUsados');
+  const pdDispEl  =document.getElementById('pdDisp');
+  if(pdTotalEl)  pdTotalEl.textContent=pd.total;
+  if(pdUsadosEl) pdUsadosEl.textContent=pd.usados;
+  if(pdDispEl){
+    pdDispEl.textContent=pd.disp<=0?'0 ⚠️':pd.disp;
+    pdDispEl.style.color=pd.disp<=0?'var(--red)':pd.disp===1?'var(--orange)':'var(--green)';
+  }
+  // Mensaje de vencimiento para Jorge Soto
+  const venceMsg=document.getElementById('pdVenceMsg');
+  if(venceMsg){
+    if(pd.vence){
+      venceMsg.style.display='block';
+      venceMsg.textContent=`⚠️ Sus Personal Days no son acumulables y vencen el ${fmt(pd.vence)}. Úselos antes de esa fecha.`;
+    } else {
+      venceMsg.style.display='none';
+    }
+  }
 }
- 
+
 // ══════════════════════════════
 // MODALS & TOAST
 // ══════════════════════════════
 function openModal(id) {document.getElementById(id).classList.add('active');}
 function closeModal(id){document.getElementById(id).classList.remove('active');}
- 
+
 function toast(title,msg){
   document.getElementById('toastTitle').textContent=title;
   document.getElementById('toastMsg').textContent=msg;
