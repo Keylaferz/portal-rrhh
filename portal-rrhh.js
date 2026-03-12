@@ -112,11 +112,12 @@ function calcVac(emp){
   const dm=new Date(hoy.getFullYear(),hoy.getMonth()+1,0).getDate();
   const im=new Date(hoy.getFullYear(),hoy.getMonth(),ini.getDate());
   const f=hoy>=im?Math.min((hoy-im)/(dm*864e5),1):0;
-  const acum=Math.floor(m+f);
+  const acum=Math.floor(m+f); // días acumulados siempre enteros (1 por mes)
   // Solo se descuentan vacaciones APROBADAS (no pendientes ni en gestión)
-  const ep=tickets.filter(t=>t.cedula===emp.cedula&&t.tipo==='vacaciones'&&t.status==='approved').reduce((s,t)=>s+(t.details.dias||0),0);
+  const ep=tickets.filter(t=>t.cedula===emp.cedula&&t.tipo==='vacaciones'&&t.status==='approved').reduce((s,t)=>s+(parseFloat(t.details.dias)||0),0);
   const u=Math.round((emp.consumidos+ep)*10)/10;
-  const disp=Math.floor(acum-u);
+  // disp preserva medios días (.5) — no se aplica Math.floor
+  const disp=Math.round((acum-u)*10)/10;
   const prox=new Date(hoy.getFullYear(),hoy.getMonth()+1,ini.getDate());
   return{meses:m,acum,usados:u,disp,pct:Math.min(100,Math.round((u/Math.max(acum,1))*100)),prox};
 }
