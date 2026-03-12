@@ -5,7 +5,10 @@
 
 // ── CONFIG ──
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyjKE7f4DXlVxBOmZHK6vGSYWQhONQgJkzuB-JslWP_89v-xhyuP74AjDYt8QiKC94w/exec';
-const GAS_EMAIL = 'kfernandezqleancr.com';
+const GAS_EMAIL = [
+  'kfernandez@leancr.com',
+  'cfernandez@leancr.com'
+];
 const ADMIN_USER = 'admin';
 const ADMIN_PASS = 'rrhh2024';
 
