@@ -47,30 +47,31 @@ function countWorkdays(ini,fin,bdayStr){
   return {days,excluded};
 }
 
-// ── EMPLOYEES ──
-// pdTotal   = Personal Days por año (3 para todos, no acumulables)
-// pdUsados  = Días ya tomados en 2026 ANTES del portal (histórico real)
-// pdAnio    = Año al que corresponde el histórico pdUsados
-// Los PD se resetean automáticamente cada 1 de enero
-// Si no se usan antes del 31/12 se pierden
-const EMPLOYEES = [
-  {cedula:'111840112',nombre:'Cristiana María Echandi Montero',   puesto:'Project Manager',            ingreso:'2019-10-01',consumidos:64,  email:'cechandi@leancr.com',  pdTotal:3, pdUsados:0,   pdAnio:2026},
-  {cedula:'116270838',nombre:'Alfonso Salomón Segura Salazar',    puesto:'Project Engineer',            ingreso:'2019-10-01',consumidos:57,  email:'asegura@leancr.com',   pdTotal:3, pdUsados:0,   pdAnio:2026},
-  {cedula:'111320139',nombre:'Cristián Fernández Cardos',         puesto:'Gerente General',             ingreso:'2019-10-01',consumidos:80,  email:'cfernandez@leancr.com',pdTotal:3, pdUsados:0,   pdAnio:2026},
-  {cedula:'305210209',nombre:'Sugey Elizabeth Mora Ureña',        puesto:'Project Engineer',            ingreso:'2022-09-15',consumidos:26,  email:'smora@leancr.com',     pdTotal:3, pdUsados:0.5, pdAnio:2026},
-  {cedula:'115420183',nombre:'Edgard Allan Solís Chaverri',       puesto:'Project Manager',             ingreso:'2022-10-03',consumidos:21,  email:'asolis@leancr.com',    pdTotal:3, pdUsados:0,   pdAnio:2026},
-  {cedula:'114230764',nombre:'Carlos Andrés Gutiérrez Garbanzo',  puesto:'Project Engineer',            ingreso:'2023-02-01',consumidos:23,  email:'cgutierrez@leancr.com',pdTotal:3, pdUsados:3,   pdAnio:2026},
-  {cedula:'117730278',nombre:'Maron Yanin Arrieta Hernández',     puesto:'Project Engineer',            ingreso:'2023-05-15',consumidos:24,  email:'marrieta@leancr.com',  pdTotal:3, pdUsados:2,   pdAnio:2026},
-  {cedula:'115780240',nombre:'Nicole Alexandra Cajina Cruz',      puesto:'Project Engineer',            ingreso:'2023-06-15',consumidos:25,  email:'ncajina@leancr.com',   pdTotal:3, pdUsados:0,   pdAnio:2026},
-  {cedula:'115570313',nombre:'Héctor Esteban Ureña Marín',        puesto:'Asistente Administrativo',    ingreso:'2024-02-26',consumidos:16,  email:'hurena@leancr.com',    pdTotal:3, pdUsados:0,   pdAnio:2026},
-  {cedula:'117870532',nombre:'María Fernanda Zeledón Barrios',    puesto:'Document Controller',         ingreso:'2024-03-18',consumidos:15,  email:'mzeledon@leancr.com',  pdTotal:3, pdUsados:1,   pdAnio:2026},
-  {cedula:'305130742',nombre:'Santiago Hernán Brenes Aguilar',    puesto:'Project Controller',          ingreso:'2024-04-01',consumidos:15,  email:'sbrenes@leancr.com',   pdTotal:3, pdUsados:0,   pdAnio:2026},
-  {cedula:'115840947',nombre:'Jesús Andrés Valverde Chaves',      puesto:'Site Construction Engineer',  ingreso:'2024-04-15',consumidos:12,  email:'avalverde@leancr.com', pdTotal:3, pdUsados:1,   pdAnio:2026},
-  {cedula:'116700149',nombre:'Jorge Soto Badilla',                puesto:'MEP Engineer',                ingreso:'2024-09-09',consumidos:15,  email:'jsoto@leancr.com',     pdTotal:3, pdUsados:0,   pdAnio:2026},
-  {cedula:'117610198',nombre:'Keila Fernández Sandí',             puesto:'Coordinadora Administrativa', ingreso:'2025-03-03',consumidos:5.5, email:'kfernandez@leancr.com',pdTotal:3, pdUsados:1,   pdAnio:2026},
-  {cedula:'206160552',nombre:'Oscar Salazar Corrales',            puesto:'Ingeniero en Electrónica',    ingreso:'2025-06-09',consumidos:4,   email:'osalazar@leancr.com',  pdTotal:3, pdUsados:0,   pdAnio:2026},
-  {cedula:'303840620',nombre:'Humberto José Navarro Guzmán',      puesto:'Director de Proyectos',       ingreso:'2025-11-24',consumidos:6,   email:'hnavarro@leancr.com',  pdTotal:3, pdUsados:0,   pdAnio:2026},
-];
+// ── EMPLOYEES — cargado dinámicamente desde Google Sheets ──
+let EMPLOYEES = []; // se llena al iniciar el portal
+
+async function loadEmployees() {
+  const res = await gasGet({action:'getEmpleados'});
+  if (res && res.ok && res.data && res.data.length > 0) {
+    EMPLOYEES = res.data.map(e => ({
+      cedula:    String(e.cedula),
+      nombre:    e.nombre,
+      puesto:    e.puesto,
+      ingreso:   e.ingreso,
+      consumidos:parseFloat(e.consumidos)||0,
+      email:     e.email,
+      pdTotal:   parseFloat(e.pdTotal)||3,
+      pdUsados:  parseFloat(e.pdUsados)||0,
+      pdAnio:    parseInt(e.pdAnio)||new Date().getFullYear(),
+    }));
+    // Caché local
+    localStorage.setItem('hr_employees', JSON.stringify(EMPLOYEES));
+  } else {
+    // Fallback a caché local
+    const cached = localStorage.getItem('hr_employees');
+    if (cached) EMPLOYEES = JSON.parse(cached);
+  }
+}
 
 // ── STATE ──
 let currentUser   = null;
@@ -287,6 +288,8 @@ function switchLoginTab(t,btn){
 }
 
 async function doLogin(){
+  // Asegurar que los empleados estén cargados
+  if(EMPLOYEES.length===0) await loadEmployees();
   const v=document.getElementById('cedulaInput').value.trim().replace(/[-.\s]/g,'');
   const emp=EMPLOYEES.find(e=>e.cedula===v);
   const err=document.getElementById('loginError');
@@ -323,13 +326,19 @@ async function initAdmin(){
   document.getElementById('loginError').style.display='none';
   isAdmin=true;
   show('adminScreen');
-  document.getElementById('adminList').innerHTML='<div class="empty-state"><div class="empty-icon">⏳</div><div>Cargando solicitudes...</div></div>';
-  // Cargar todos los tickets desde Sheets
+  document.getElementById('adminList').innerHTML='<div class="empty-state"><div class="empty-icon">⏳</div><div>Cargando datos...</div></div>';
+  // Cargar empleados y tickets desde Sheets
+  await loadEmployees();
   await loadAllTickets();
   populateEmpFilter(); renderAdmin();
+  refreshEmpSelect();
+}
+
+function refreshEmpSelect(){
   const sel=document.getElementById('expEmpSelect');
   sel.innerHTML='<option value="">— Seleccione un colaborador —</option>'+
-    EMPLOYEES.map(e=>`<option value="${e.cedula}">${e.nombre}</option>`).join('');
+    EMPLOYEES.sort((a,b)=>a.nombre.localeCompare(b.nombre))
+      .map(e=>`<option value="${e.cedula}">${e.nombre}</option>`).join('');
 }
 
 function doLogout(){
@@ -1142,4 +1151,135 @@ function toast(title,msg){
   el.style.display='block';
   clearTimeout(window._toastTimer);
   window._toastTimer=setTimeout(()=>el.style.display='none',5500);
+}
+
+// ══════════════════════════════
+// ADMIN — Gestión de Colaboradores
+// ══════════════════════════════
+let colabToDelete = null;
+
+async function loadColabTab() {
+  const el = document.getElementById('colabList');
+  el.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><div>Cargando colaboradores...</div></div>';
+  await loadEmployees();
+  renderColabList();
+}
+
+function renderColabList() {
+  const el = document.getElementById('colabList');
+  if (!EMPLOYEES.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><div>No hay colaboradores registrados</div></div>';
+    return;
+  }
+  const sorted = [...EMPLOYEES].sort((a,b) => a.nombre.localeCompare(b.nombre));
+  el.innerHTML = `
+    <div style="margin-bottom:10px;font-size:12px;color:var(--g400)">${EMPLOYEES.length} colaborador(es) activos</div>
+    ${sorted.map(e => {
+      const vac = calcVac(e);
+      const pd  = calcPD(e);
+      return `<div class="admin-ticket">
+        <div class="at-head">
+          <div>
+            <div class="at-name">${e.nombre}</div>
+            <div class="at-meta">${e.puesto} · Cédula: ${e.cedula}</div>
+            <div class="at-meta">📧 ${e.email} · Ingreso: ${fmt(e.ingreso)}</div>
+            <div class="at-meta" style="margin-top:4px">
+              🏖️ Vacaciones: <strong style="color:${vac.disp<0?'var(--red)':vac.disp<=3?'var(--orange)':'var(--green)'}">${vac.disp} días</strong>
+              &nbsp;·&nbsp;
+              ⭐ Personal Days: <strong style="color:${pd.disp<=0?'var(--red)':pd.disp===1?'var(--orange)':'var(--green)'}">${pd.disp} disp.</strong>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+            <button class="btn-edit" onclick="openEditColab('${e.cedula}')">✏️ Editar</button>
+            <button class="btn-cancel-req" onclick="openDeleteColab('${e.cedula}','${e.nombre.replace(/'/g,"\\'")}')">🗑️ Eliminar</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('')}`;
+}
+
+function openNuevoColab() {
+  document.getElementById('colabModalTitle').textContent = '➕ Nuevo Colaborador';
+  document.getElementById('colab-mode').value = 'new';
+  ['colab-nombre','colab-cedula','colab-email','colab-puesto'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('colab-ingreso').value = '';
+  document.getElementById('colab-consumidos').value = '0';
+  document.getElementById('colab-pdUsados').value = '0';
+  document.getElementById('colab-cedula').readOnly = false;
+  openModal('colabModal');
+}
+
+function openEditColab(cedula) {
+  const e = EMPLOYEES.find(e => e.cedula === cedula);
+  if (!e) return;
+  document.getElementById('colabModalTitle').textContent = '✏️ Editar Colaborador';
+  document.getElementById('colab-mode').value = 'edit';
+  document.getElementById('colab-nombre').value    = e.nombre;
+  document.getElementById('colab-cedula').value    = e.cedula;
+  document.getElementById('colab-email').value     = e.email;
+  document.getElementById('colab-puesto').value    = e.puesto;
+  document.getElementById('colab-ingreso').value   = e.ingreso;
+  document.getElementById('colab-consumidos').value = e.consumidos;
+  document.getElementById('colab-pdUsados').value  = e.pdUsados;
+  document.getElementById('colab-cedula').readOnly = true; // no se puede cambiar cédula
+  openModal('colabModal');
+}
+
+async function saveColab() {
+  const mode     = document.getElementById('colab-mode').value;
+  const cedula   = document.getElementById('colab-cedula').value.trim().replace(/[-.\s]/g,'');
+  const nombre   = document.getElementById('colab-nombre').value.trim();
+  const email    = document.getElementById('colab-email').value.trim();
+  const puesto   = document.getElementById('colab-puesto').value.trim();
+  const ingreso  = document.getElementById('colab-ingreso').value;
+  const consumidos = parseFloat(document.getElementById('colab-consumidos').value)||0;
+  const pdUsados   = parseFloat(document.getElementById('colab-pdUsados').value)||0;
+
+  if (!cedula||!nombre||!email||!puesto||!ingreso) {
+    alert('Complete todos los campos obligatorios'); return;
+  }
+  if (mode==='new' && EMPLOYEES.find(e=>e.cedula===cedula)) {
+    alert('Ya existe un colaborador con esa cédula'); return;
+  }
+
+  showOverlay(mode==='new'?'Agregando colaborador...':'Actualizando colaborador...');
+  const res = await callGAS({
+    action: mode==='new' ? 'addEmpleado' : 'updateEmpleado',
+    cedula, nombre, puesto, ingreso,
+    consumidos, email, pdTotal:3, pdUsados,
+    pdAnio: new Date().getFullYear()
+  });
+  closeModal('colabModal');
+
+  if (res && res.ok) {
+    await loadEmployees();
+    renderColabList();
+    refreshEmpSelect();
+    toast(mode==='new'?'✅ Colaborador agregado':'✅ Colaborador actualizado', nombre);
+  } else {
+    toast('❌ Error', 'No se pudo guardar en Sheets');
+  }
+}
+
+function openDeleteColab(cedula, nombre) {
+  colabToDelete = cedula;
+  document.getElementById('deleteColabName').textContent = nombre;
+  openModal('deleteColabModal');
+}
+
+async function confirmDeleteColab() {
+  if (!colabToDelete) return;
+  showOverlay('Eliminando colaborador...');
+  const res = await callGAS({action:'deleteEmpleado', cedula:colabToDelete});
+  closeModal('deleteColabModal');
+
+  if (res && res.ok) {
+    await loadEmployees();
+    renderColabList();
+    refreshEmpSelect();
+    toast('🗑️ Colaborador eliminado', 'Los datos fueron removidos del Sheet');
+  } else {
+    toast('❌ Error', 'No se pudo eliminar del Sheet');
+  }
+  colabToDelete = null;
 }
