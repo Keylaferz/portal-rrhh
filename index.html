@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Portal RRHH — Lean Consulting</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="portal-rrhh.css"/>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen" class="screen active">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-icon">🏢</div>
+      <div><h1>Lean Consulting</h1><p>PORTAL DE RECURSOS HUMANOS</p></div>
+    </div>
+    <h2 class="login-title">Bienvenido/a</h2>
+    <p class="login-sub">Ingrese su cédula para acceder al portal</p>
+    <div class="login-tabs">
+      <button class="login-tab active" onclick="switchLoginTab('emp',this)">👤 Colaborador</button>
+      <button class="login-tab" onclick="switchLoginTab('admin',this)">🔐 Administrador</button>
+    </div>
+    <div class="err-box" id="loginError"></div>
+    <div id="empLogin">
+      <div class="fg"><label>Número de Cédula</label>
+        <input type="text" id="cedulaInput" placeholder="Ej: 111320139" maxlength="15"
+          onkeydown="if(event.key==='Enter')doLogin()" autocomplete="off"/></div>
+      <button class="btn-primary" onclick="doLogin()">Ingresar →</button>
+      <p class="hint">🔒 Acceso exclusivo para colaboradores registrados</p>
+    </div>
+    <div id="adminLogin" style="display:none">
+      <div class="fg"><label>Usuario</label><input type="text" id="adminUser" placeholder="admin" autocomplete="off"/></div>
+      <div class="fg"><label>Contraseña</label><input type="password" id="adminPass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doAdminLogin()"/></div>
+      <button class="btn-primary" onclick="doAdminLogin()">Acceder al panel →</button>
+      <p class="hint">🛡️ Solo personal autorizado de RRHH</p>
+    </div>
+  </div>
+</div>
+
+<!-- COLABORADOR -->
+<div id="appScreen" class="screen">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-icon">🏢</div>
+      <span class="topbar-title">Portal RRHH — Lean Consulting</span>
+    </div>
+    <div class="topbar-right">
+      <div class="user-badge">
+        <div class="user-avatar" id="userAvatar">?</div>
+        <div><div class="user-name" id="userName">—</div><div class="user-ced" id="userCedula">—</div></div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">⏏ Salir</button>
+    </div>
+  </div>
+  <div class="main">
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-icon si-blue">🏖️</div><div><div class="stat-val" id="statVac">—</div><div class="stat-lbl">Días vacaciones disponibles</div></div></div>
+      <div class="stat-card"><div class="stat-icon si-green">✅</div><div><div class="stat-val" id="statApro">0</div><div class="stat-lbl">Aprobadas</div></div></div>
+      <div class="stat-card"><div class="stat-icon si-yellow">⏳</div><div><div class="stat-val" id="statPend">0</div><div class="stat-lbl">Pendientes</div></div></div>
+      <div class="stat-card"><div class="stat-icon si-orange">🎂</div><div><div class="stat-val">1</div><div class="stat-lbl">Día cumpleaños</div></div></div>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="showTab('nueva',this)">➕ Nueva Solicitud</button>
+      <button class="tab-btn" onclick="showTab('expediente',this)">📁 Mi Expediente</button>
+      <button class="tab-btn" onclick="showTab('historial',this)">📋 Mis Solicitudes</button>
+      <button class="tab-btn" onclick="showTab('desglose',this)">📊 Mi Desglose</button>
+    </div>
+
+    <!-- Tab: Nueva Solicitud -->
+    <div class="tab-panel active" id="tab-nueva">
+      <div class="card">
+        <h2 class="card-title">Nueva Solicitud</h2>
+        <p class="card-sub">Seleccione el tipo · Fines de semana, feriados nacionales y su día de cumpleaños se excluyen automáticamente</p>
+        <div class="req-types">
+          <div class="req-type" onclick="selType('vacaciones')" id="type-vacaciones"><div class="ri">🏖️</div><div class="rn">Vacaciones</div><div class="rd">Días de descanso</div></div>
+          <div class="req-type" onclick="selType('incapacidad')" id="type-incapacidad"><div class="ri">🏥</div><div class="rn">Incapacidad</div><div class="rd">Registro médico</div></div>
+          <div class="req-type" onclick="selType('cumpleanos')" id="type-cumpleanos"><div class="ri">🎂</div><div class="rn">Cumpleaños</div><div class="rd">Día libre cumpleaños</div></div>
+          <div class="req-type" onclick="selType('personalday')" id="type-personalday"><div class="ri">⭐</div><div class="rn">Personal Day</div><div class="rd">Día extra / personal</div></div>
+          <div class="req-type" onclick="selType('singoce')" id="type-singoce"><div class="ri">📤</div><div class="rn">Día Sin Goce</div><div class="rd">Sin salario, sin vacaciones</div></div>
+        </div>
+        <div id="formFields" style="display:none">
+          <!-- Vacaciones -->
+          <div id="fields-vacaciones" class="fg-group" style="display:none">
+            <div class="form-row">
+              <div class="fg"><label>Fecha inicio</label><input type="date" id="vac-ini" onchange="calcDays('vacaciones')"/></div>
+              <div class="fg"><label>Fecha fin</label><input type="date" id="vac-fin" onchange="calcDays('vacaciones')"/></div>
+            </div>
+            <div id="days-counter-vacaciones" class="days-counter" style="display:none">
+              <div><div class="days-counter-label">📅 Días hábiles a solicitar</div><div class="days-counter-sub" id="days-range-vacaciones"></div><div class="days-excluded" id="days-excl-vacaciones"></div></div>
+              <div style="text-align:right"><div class="days-counter-val" id="days-val-vacaciones">0</div><div class="days-counter-sub">días hábiles</div></div>
+            </div>
+            <div class="fg"><label>Modalidad</label><select id="vac-mod"><option>Día completo</option><option>Media mañana</option><option>Media tarde</option></select></div>
+          </div>
+          <!-- Incapacidad -->
+          <div id="fields-incapacidad" class="fg-group" style="display:none">
+            <div class="form-row">
+              <div class="fg"><label>Fecha inicio</label><input type="date" id="inc-ini" onchange="calcDays('incapacidad')"/></div>
+              <div class="fg"><label>Fecha fin</label><input type="date" id="inc-fin" onchange="calcDays('incapacidad')"/></div>
+            </div>
+            <div id="days-counter-incapacidad" class="days-counter" style="display:none">
+              <div><div class="days-counter-label">📅 Días hábiles a solicitar</div><div class="days-counter-sub" id="days-range-incapacidad"></div><div class="days-excluded" id="days-excl-incapacidad"></div></div>
+              <div style="text-align:right"><div class="days-counter-val" id="days-val-incapacidad">0</div><div class="days-counter-sub">días hábiles</div></div>
+            </div>
+            <div class="fg"><label>Tipo</label><select id="inc-tipo"><option>Enfermedad general</option><option>Accidente de trabajo</option><option>Maternidad / Paternidad</option><option>Cuido de familiar</option></select></div>
+            <div class="fg"><label>Médico / Centro de salud</label><input type="text" id="inc-med" placeholder="Ej: Dr. Pérez — CCSS Zapote"/></div>
+            <div class="fg"><label>Turno</label><select id="inc-turno"><option>Día completo</option><option>Media mañana</option><option>Media tarde</option></select></div>
+          </div>
+          <!-- Cumpleaños -->
+          <div id="fields-cumpleanos" class="fg-group" style="display:none">
+            <div class="form-row">
+              <div class="fg"><label>Fecha inicio</label><input type="date" id="cum-ini" onchange="calcDays('cumpleanos')"/></div>
+              <div class="fg"><label>Fecha fin</label><input type="date" id="cum-fin" onchange="calcDays('cumpleanos')"/></div>
+            </div>
+            <div id="days-counter-cumpleanos" class="days-counter" style="display:none">
+              <div><div class="days-counter-label">📅 Días hábiles a solicitar</div><div class="days-counter-sub" id="days-range-cumpleanos"></div><div class="days-excluded" id="days-excl-cumpleanos"></div></div>
+              <div style="text-align:right"><div class="days-counter-val" id="days-val-cumpleanos">0</div><div class="days-counter-sub">días hábiles</div></div>
+            </div>
+            <div class="fg"><label>Turno</label><select id="cum-turno"><option>Día completo</option><option>Media mañana</option><option>Media tarde</option></select></div>
+          </div>
+          <!-- Personal Day -->
+          <div id="fields-personalday" class="fg-group" style="display:none">
+            <div class="form-row">
+              <div class="fg"><label>Fecha inicio</label><input type="date" id="per-ini" onchange="calcDays('personalday')"/></div>
+              <div class="fg"><label>Fecha fin</label><input type="date" id="per-fin" onchange="calcDays('personalday')"/></div>
+            </div>
+            <div id="days-counter-personalday" class="days-counter" style="display:none">
+              <div><div class="days-counter-label">📅 Días hábiles a solicitar</div><div class="days-counter-sub" id="days-range-personalday"></div><div class="days-excluded" id="days-excl-personalday"></div></div>
+              <div style="text-align:right"><div class="days-counter-val" id="days-val-personalday">0</div><div class="days-counter-sub">días hábiles</div></div>
+            </div>
+            <div class="fg"><label>Turno</label><select id="per-turno"><option>Día completo</option><option>Media mañana</option><option>Media tarde</option></select></div>
+            <div class="fg"><label>Motivo</label><select id="per-mot"><option>Personal Day</option><option>Día Extra por horas trabajadas</option><option>Día compensatorio</option><option>Otro</option></select></div>
+          </div>
+          <!-- Día Sin Goce -->
+          <div id="fields-singoce" class="fg-group" style="display:none">
+            <div class="warn-box">⚠️ <strong>Día sin goce de salario:</strong> No descuenta vacaciones pero sí afecta el salario del período. Requiere aprobación de RRHH.</div>
+            <div class="form-row">
+              <div class="fg"><label>Fecha inicio</label><input type="date" id="sg-ini" onchange="calcDays('singoce')"/></div>
+              <div class="fg"><label>Fecha fin</label><input type="date" id="sg-fin" onchange="calcDays('singoce')"/></div>
+            </div>
+            <div id="days-counter-singoce" class="days-counter" style="display:none">
+              <div><div class="days-counter-label">📅 Días hábiles sin goce</div><div class="days-counter-sub" id="days-range-singoce"></div><div class="days-excluded" id="days-excl-singoce"></div></div>
+              <div style="text-align:right"><div class="days-counter-val" id="days-val-singoce">0</div><div class="days-counter-sub">días hábiles</div></div>
+            </div>
+            <div class="fg"><label>Turno</label><select id="sg-turno"><option>Día completo</option><option>Media mañana</option><option>Media tarde</option></select></div>
+            <div class="fg"><label>Motivo</label><textarea id="sg-mot" rows="2" placeholder="Indique el motivo..."></textarea></div>
+          </div>
+          <div class="fg" style="margin-top:4px"><label>Observaciones adicionales (opcional)</label><textarea id="obs" rows="2" placeholder="Cualquier detalle adicional..."></textarea></div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px">
+            <button class="btn-sec" onclick="clearForm()">Cancelar</button>
+            <button class="btn-submit" onclick="submitRequest()">📨 Enviar Solicitud</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Mi Expediente -->
+    <div class="tab-panel" id="tab-expediente">
+      <div class="card">
+        <h2 class="card-title">📁 Mi Expediente</h2>
+        <p class="card-sub">Información personal registrada por RRHH · Solo el administrador puede editar estos datos</p>
+        <div id="expView"></div>
+      </div>
+    </div>
+
+    <!-- Tab: Mis Solicitudes -->
+    <div class="tab-panel" id="tab-historial">
+      <div class="card">
+        <h2 class="card-title">Mis Solicitudes</h2>
+        <p class="card-sub">Estado en tiempo real · Puede editar o cancelar solicitudes pendientes (máximo 2 veces)</p>
+        <div id="ticketsList"></div>
+      </div>
+    </div>
+
+    <!-- Tab: Mi Desglose -->
+    <div class="tab-panel" id="tab-desglose">
+      <div class="card">
+        <h2 class="card-title">Mi Desglose de Vacaciones</h2>
+        <p class="card-sub">Saldo calculado en tiempo real desde su fecha de ingreso</p>
+        <div class="vac-grid">
+          <div class="vac-card"><div class="vac-num" style="font-size:16px;margin-top:8px" id="vacIngreso">—</div><div class="vac-unit">fecha de ingreso</div><div class="vac-lbl">Antigüedad</div><div style="margin-top:5px;font-size:11px;color:var(--g400)"><span id="vacMeses">—</span> meses laborados</div></div>
+          <div class="vac-card"><div class="vac-num" id="vacAcum">—</div><div class="vac-unit">días acumulados</div><div class="vac-lbl">Total ganado</div><div style="margin-top:4px;font-size:10px;color:var(--g400)">Próximo: <strong id="vacProx">—</strong></div></div>
+          <div class="vac-card"><div class="vac-num" id="vacCons" style="color:var(--orange)">—</div><div class="vac-unit">días utilizados</div><div class="vac-lbl">Histórico + portal</div><div class="prog-bar" style="margin-top:9px"><div class="prog-fill" id="vacProg" style="width:0%"></div></div></div>
+          <div class="vac-card"><div class="vac-num" id="vacDisp">—</div><div class="vac-unit">días disponibles</div><div class="vac-lbl">Saldo actual</div><div style="margin-top:4px;font-size:10px;color:var(--g400)">Actualizado hoy</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2 class="card-title" style="font-size:16px">Reglamento — Puntos clave</h2>
+        <ul class="rules-list">
+          <li>Las vacaciones se acumulan <strong>1 día por mes laborado</strong>, proporcional desde la fecha de ingreso.</li>
+          <li>Los <strong>sábados, domingos, feriados nacionales</strong> y su <strong>día de cumpleaños</strong> no cuentan como días solicitados.</li>
+          <li>Deben solicitarse con al menos <strong>7 días hábiles de anticipación</strong>.</li>
+          <li>El día de cumpleaños debe gestionarse <strong>dentro del mes calendario</strong> correspondiente.</li>
+          <li>Los <strong>días sin goce</strong> no descuentan vacaciones pero sí afectan el salario del período.</li>
+          <li>Cada solicitud puede editarse o cancelarse un máximo de <strong>2 veces</strong> mientras esté pendiente.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <footer>© 2026 <strong>Lean Consulting S.A.</strong> – Portal de Recursos Humanos. Todos los derechos reservados.</footer>
+</div>
+
+<!-- ADMIN -->
+<div id="adminScreen" class="screen">
+  <div class="topbar admin-topbar">
+    <div class="topbar-left">
+      <div class="topbar-icon" style="background:linear-gradient(135deg,#7C3AED,#4C1D95)">🛡️</div>
+      <span class="topbar-title">Panel de Administración — Lean Consulting</span>
+      <span class="admin-badge">ADMIN</span>
+    </div>
+    <div class="topbar-right">
+      <div class="user-badge" style="background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.25)">
+        <div class="user-avatar adm">A</div>
+        <div><div class="user-name" style="color:#fff">Administrador</div><div class="user-ced" style="color:#C4B5FD">RRHH</div></div>
+      </div>
+      <button class="btn-logout" style="color:#C4B5FD;border-color:rgba(255,255,255,.3)" onclick="doLogout()">⏏ Salir</button>
+    </div>
+  </div>
+  <div class="main">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="showAdminTab('solicitudes',this)">📋 Solicitudes</button>
+      <button class="tab-btn" onclick="showAdminTab('expedientes',this)">📁 Expedientes</button>
+    </div>
+
+    <!-- Admin: Solicitudes -->
+    <div class="tab-panel active" id="admin-tab-solicitudes">
+      <div class="admin-stats">
+        <div class="stat-card"><div class="stat-icon si-yellow">⏳</div><div><div class="stat-val" id="adm-pend">0</div><div class="stat-lbl">Pendientes</div></div></div>
+        <div class="stat-card"><div class="stat-icon si-blue">🔄</div><div><div class="stat-val" id="adm-proc">0</div><div class="stat-lbl">En gestión</div></div></div>
+        <div class="stat-card"><div class="stat-icon si-green">✅</div><div><div class="stat-val" id="adm-apro">0</div><div class="stat-lbl">Aprobadas</div></div></div>
+        <div class="stat-card"><div class="stat-icon si-red">❌</div><div><div class="stat-val" id="adm-deny">0</div><div class="stat-lbl">Denegadas</div></div></div>
+        <div class="stat-card"><div class="stat-icon si-purple">📋</div><div><div class="stat-val" id="adm-total">0</div><div class="stat-lbl">Total</div></div></div>
+      </div>
+      <div class="filter-bar">
+        <select class="filter-select" id="filt-status" onchange="renderAdmin()"><option value="">Todos los estados</option><option value="pending">⏳ Pendiente</option><option value="inprogress">🔄 En Gestión</option><option value="approved">✅ Aprobadas</option><option value="denied">❌ Denegadas</option><option value="cancelled">🚫 Canceladas</option></select>
+        <select class="filter-select" id="filt-tipo" onchange="renderAdmin()"><option value="">Todos los tipos</option><option value="vacaciones">🏖️ Vacaciones</option><option value="incapacidad">🏥 Incapacidad</option><option value="cumpleanos">🎂 Cumpleaños</option><option value="personalday">⭐ Personal Day</option><option value="singoce">📤 Día Sin Goce</option></select>
+        <select class="filter-select" id="filt-emp" onchange="renderAdmin()"><option value="">Todos los empleados</option></select>
+        <button class="btn-sec" onclick="resetFilters()">↺ Limpiar</button>
+      </div>
+      <div id="adminList"></div>
+    </div>
+
+    <!-- Admin: Expedientes -->
+    <div class="tab-panel" id="admin-tab-expedientes">
+      <div class="card">
+        <h2 class="card-title">📁 Gestión de Expedientes</h2>
+        <p class="card-sub">Seleccione un colaborador para agregar o editar su expediente</p>
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:20px;flex-wrap:wrap;">
+          <select class="exp-admin-select" id="expEmpSelect"><option value="">— Seleccione un colaborador —</option></select>
+          <button class="btn-purple" onclick="loadExpAdmin()">📂 Cargar expediente</button>
+        </div>
+        <div id="expAdminForm" style="display:none">
+          <div id="expAdminName" style="font-family:'DM Serif Display',serif;font-size:17px;color:var(--b800);margin-bottom:16px;"></div>
+          <div class="section-header"><div class="sh-icon">👤</div><h3>Datos Personales</h3></div>
+          <div class="form-row-3">
+            <div class="fg"><label>Nombre(s)</label><input type="text" id="exp-nombres"/></div>
+            <div class="fg"><label>Primer Apellido</label><input type="text" id="exp-ap1"/></div>
+            <div class="fg"><label>Segundo Apellido</label><input type="text" id="exp-ap2"/></div>
+          </div>
+          <div class="form-row">
+            <div class="fg"><label>Género</label><select id="exp-genero"><option value="">Seleccione</option><option>Masculino</option><option>Femenino</option><option>Prefiero no indicar</option></select></div>
+            <div class="fg"><label>Cédula</label><input type="text" id="exp-cedula" readonly/></div>
+          </div>
+          <div class="form-row">
+            <div class="fg"><label>Fecha de Nacimiento (dd/MM/yyyy)</label><input type="text" id="exp-fnac" placeholder="30/01/1990" maxlength="10"/></div>
+            <div class="fg"><label>Nacionalidad</label><input type="text" id="exp-nac" placeholder="Costarricense"/></div>
+          </div>
+          <div class="form-row">
+            <div class="fg"><label>País de Nacimiento</label><input type="text" id="exp-pais" placeholder="Costa Rica"/></div>
+            <div class="fg"><label>Estado Civil</label><select id="exp-civil"><option value="">Seleccione</option><option>Soltero/a</option><option>Casado/a</option><option>Unión libre</option><option>Divorciado/a</option><option>Viudo/a</option></select></div>
+          </div>
+          <div class="fg" style="max-width:200px"><label>Número de Hijos</label><input type="number" id="exp-hijos" min="0" placeholder="0"/></div>
+          <div class="section-header"><div class="sh-icon">📍</div><h3>Dirección Actual</h3></div>
+          <div class="form-row-3">
+            <div class="fg"><label>Provincia</label><select id="exp-prov"><option value="">Seleccione</option><option>San José</option><option>Alajuela</option><option>Cartago</option><option>Heredia</option><option>Guanacaste</option><option>Puntarenas</option><option>Limón</option></select></div>
+            <div class="fg"><label>Cantón</label><input type="text" id="exp-canton" placeholder="Ej: Escazú"/></div>
+            <div class="fg"><label>Distrito</label><input type="text" id="exp-distrito" placeholder="Ej: San Rafael"/></div>
+          </div>
+          <div class="fg"><label>Dirección Exacta</label><textarea id="exp-direccion" rows="2" placeholder="Ej: Condominio Los Pinos, casa #14..."></textarea></div>
+          <div class="section-header"><div class="sh-icon">📞</div><h3>Contacto</h3></div>
+          <div class="form-row">
+            <div class="fg"><label>Teléfono Personal</label><input type="tel" id="exp-tel" placeholder="8888-8888"/></div>
+            <div class="fg"><label>Correo Electrónico Personal</label><input type="email" id="exp-emailpers" placeholder="nombre@gmail.com"/></div>
+          </div>
+          <div class="form-row">
+            <div class="fg"><label>Nombre — Contacto de Emergencia</label><input type="text" id="exp-emerg-nom" placeholder="Nombre completo"/></div>
+            <div class="fg"><label>Teléfono de Emergencia</label><input type="tel" id="exp-emerg-tel" placeholder="8888-8888"/></div>
+          </div>
+          <div class="section-header"><div class="sh-icon">🏦</div><h3>Información Bancaria y Laboral</h3></div>
+          <div class="form-row">
+            <div class="fg"><label>Cuenta IBAN — Tarjeta de Planilla</label><input type="text" id="exp-iban" placeholder="CR21015202001026284066"/></div>
+            <div class="fg"><label>Profesión</label><input type="text" id="exp-profesion" placeholder="Ej: Ingeniero Civil"/></div>
+          </div>
+          <div class="fg"><label>Otros Estudios (en proceso o a futuro)</label><input type="text" id="exp-estudios" placeholder="Ej: Maestría en Administración — en proceso"/></div>
+          <div class="section-header"><div class="sh-icon">🏥</div><h3>Información Médica</h3></div>
+          <div class="form-row">
+            <div class="fg"><label>Medicamentos (uso regular)</label><textarea id="exp-meds" rows="2" placeholder="Indique medicamentos o escriba 'Ninguno'"></textarea></div>
+            <div class="fg"><label>Alergias</label><textarea id="exp-alergias" rows="2" placeholder="Indique alergias o escriba 'Ninguna'"></textarea></div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px">
+            <button class="btn-sec" onclick="document.getElementById('expAdminForm').style.display='none'">Cancelar</button>
+            <button class="btn-submit" onclick="saveExpAdmin()">💾 Guardar expediente</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer>© 2026 <strong>Lean Consulting S.A.</strong> – Portal de Recursos Humanos. Todos los derechos reservados.</footer>
+</div>
+
+<!-- MODALES -->
+<div class="modal-overlay" id="emailModal">
+  <div class="modal">
+    <div class="modal-header"><h3 class="modal-title">📧 Vista previa del correo</h3><button class="modal-close" onclick="closeModal('emailModal')">✕</button></div>
+    <p style="font-size:12px;color:var(--g400);margin-bottom:12px">Correo que se enviará automáticamente a RRHH:</p>
+    <div class="email-preview" id="emailPreview"></div>
+    <div class="modal-actions"><button class="btn-sec" onclick="closeModal('emailModal')">Cancelar</button><button class="btn-submit" onclick="confirmSend()">✅ Confirmar y Enviar</button></div>
+  </div>
+</div>
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <div class="modal-header"><h3 class="modal-title">✏️ Editar Solicitud</h3><button class="modal-close" onclick="closeModal('editModal')">✕</button></div>
+    <p style="font-size:12px;color:var(--g600);margin-bottom:3px" id="editSubtitle"></p>
+    <p style="font-size:11px;color:var(--orange);margin-bottom:14px" id="editWarning"></p>
+    <div class="form-row">
+      <div class="fg"><label>Nueva fecha inicio</label><input type="date" id="edit-ini" onchange="calcEditDays()"/></div>
+      <div class="fg"><label>Nueva fecha fin</label><input type="date" id="edit-fin" onchange="calcEditDays()"/></div>
+    </div>
+    <div id="edit-days-counter" class="days-counter" style="display:none">
+      <div><div class="days-counter-label">📅 Días hábiles</div><div class="days-counter-sub" id="edit-days-range"></div><div class="days-excluded" id="edit-days-excl"></div></div>
+      <div style="text-align:right"><div class="days-counter-val" id="edit-days-val">0</div><div class="days-counter-sub">días</div></div>
+    </div>
+    <div class="fg"><label>Turno / Modalidad</label><select id="edit-turno"><option>Día completo</option><option>Media mañana</option><option>Media tarde</option></select></div>
+    <div class="fg"><label>Motivo de la edición</label><textarea id="edit-reason" rows="2" placeholder="Ej: Cambio de fechas..."></textarea></div>
+    <div class="modal-actions"><button class="btn-sec" onclick="closeModal('editModal')">Cancelar</button><button class="btn-submit" onclick="confirmEdit()">💾 Guardar y notificar</button></div>
+  </div>
+</div>
+<div class="modal-overlay" id="cancelModal">
+  <div class="modal">
+    <div class="modal-header"><h3 class="modal-title">🚫 Cancelar Solicitud</h3><button class="modal-close" onclick="closeModal('cancelModal')">✕</button></div>
+    <p style="font-size:12px;color:var(--g600);margin-bottom:3px" id="cancelSubtitle"></p>
+    <p style="font-size:11px;color:var(--orange);margin-bottom:14px" id="cancelWarning"></p>
+    <div class="fg"><label>Motivo de cancelación</label><textarea id="cancel-reason" rows="3" placeholder="Indique el motivo..."></textarea></div>
+    <div class="modal-actions"><button class="btn-sec" onclick="closeModal('cancelModal')">Volver</button><button class="btn-danger" onclick="confirmCancel()">🚫 Confirmar cancelación</button></div>
+  </div>
+</div>
+<div class="modal-overlay" id="resolveModal">
+  <div class="modal">
+    <div class="modal-header"><h3 class="modal-title" id="resolveTitle">Resolver solicitud</h3><button class="modal-close" onclick="closeModal('resolveModal')">✕</button></div>
+    <p style="font-size:12px;color:var(--g600);margin-bottom:14px" id="resolveSubtitle"></p>
+    <div class="fg"><label>Nota para el colaborador (opcional)</label><textarea id="resolveNote" rows="3" placeholder="Ej: Aprobado según política. Coordinar con supervisor..."></textarea></div>
+    <p style="font-size:11px;color:var(--g400);margin-bottom:3px">⚡ Se enviarán correos al colaborador y a RRHH.</p>
+    <div class="modal-actions"><button class="btn-sec" onclick="closeModal('resolveModal')">Cancelar</button><button id="resolveBtn" class="btn-submit" onclick="confirmResolve()">Confirmar</button></div>
+  </div>
+</div>
+
+<div class="sending-overlay" id="sendingOverlay">
+  <div class="sending-box"><div class="spinner"></div><div class="sending-title">Enviando correo...</div><div class="sending-sub">Via Gmail · Lean Consulting</div></div>
+</div>
+<div id="toast"><div class="tt" id="toastTitle"></div><div class="tm" id="toastMsg"></div></div>
+
+<script src="portal-rrhh.js"></script>
+</body>
+</html>
