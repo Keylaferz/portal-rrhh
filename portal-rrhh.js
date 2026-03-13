@@ -56,13 +56,14 @@ async function loadEmployees() {
     EMPLOYEES = res.data.map(e => ({
       cedula:    String(e.cedula),
       nombre:    e.nombre,
-      puesto:    e.puesto,
-      ingreso:   e.ingreso,
+      puesto:    e.puesto    || '',
+      ingreso:   e.ingreso   || '',
       consumidos:parseFloat(e.consumidos)||0,
-      email:     e.email,
+      email:     e.email     || '',
       pdTotal:   parseFloat(e.pdTotal)||3,
       pdUsados:  parseFloat(e.pdUsados)||0,
       pdAnio:    parseInt(e.pdAnio)||new Date().getFullYear(),
+      acceso:    e.acceso    || 'activo',
     }));
     // Caché local
     localStorage.setItem('hr_employees', JSON.stringify(EMPLOYEES));
@@ -294,6 +295,7 @@ async function doLogin(){
   const emp=EMPLOYEES.find(e=>e.cedula===v);
   const err=document.getElementById('loginError');
   if(!emp){err.style.display='block';err.textContent='⚠️ Cédula no encontrada.';return;}
+  if(emp.acceso==='inactivo'){err.style.display='block';err.textContent='🚫 Su acceso al portal ha sido deshabilitado. Contacte a RRHH.';return;}
   err.style.display='none';
   currentUser=emp; isAdmin=false;
   show('appScreen');
@@ -1167,31 +1169,41 @@ async function loadColabTab() {
 
 function renderColabList() {
   const el = document.getElementById('colabList');
-  if (!EMPLOYEES.length) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><div>No hay colaboradores registrados</div></div>';
+  const q  = (document.getElementById('colabSearch')?.value||'').toLowerCase();
+  let list = [...EMPLOYEES].sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  if(q) list = list.filter(e=>e.nombre.toLowerCase().includes(q)||e.cedula.includes(q));
+
+  if (!list.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><div>No se encontraron colaboradores</div></div>';
     return;
   }
-  const sorted = [...EMPLOYEES].sort((a,b) => a.nombre.localeCompare(b.nombre));
   el.innerHTML = `
-    <div style="margin-bottom:10px;font-size:12px;color:var(--g400)">${EMPLOYEES.length} colaborador(es) activos</div>
-    ${sorted.map(e => {
-      const vac = calcVac(e);
-      const pd  = calcPD(e);
+    <div style="margin-bottom:10px;font-size:12px;color:var(--g400)">${list.length} de ${EMPLOYEES.length} colaborador(es)</div>
+    ${list.map(e => {
+      const acceso = e.acceso !== 'inactivo';
+      const vac    = e.ingreso ? calcVac(e) : null;
+      const pd     = calcPD(e);
+      const ns     = e.nombre.replace(/['"]/g,' ');
       return `<div class="admin-ticket">
         <div class="at-head">
-          <div>
-            <div class="at-name">${e.nombre}</div>
-            <div class="at-meta">${e.puesto} · Cédula: ${e.cedula}</div>
-            <div class="at-meta">📧 ${e.email} · Ingreso: ${fmt(e.ingreso)}</div>
-            <div class="at-meta" style="margin-top:4px">
-              🏖️ Vacaciones: <strong style="color:${vac.disp<0?'var(--red)':vac.disp<=3?'var(--orange)':'var(--green)'}">${vac.disp} días</strong>
-              &nbsp;·&nbsp;
-              ⭐ Personal Days: <strong style="color:${pd.disp<=0?'var(--red)':pd.disp===1?'var(--orange)':'var(--green)'}">${pd.disp} disp.</strong>
+          <div style="flex:1">
+            <div class="at-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              ${e.nombre}
+              <span style="font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600;
+                background:${acceso?'#D1FAE5':'#FEE2E2'};color:${acceso?'#065F46':'#991B1B'}">
+                ${acceso?'✅ Activo':'🚫 Sin acceso'}
+              </span>
             </div>
+            <div class="at-meta">Cédula: <strong>${e.cedula}</strong>${e.puesto?' &nbsp;·&nbsp; '+e.puesto:' &nbsp;·&nbsp; <em style="color:var(--g400)">Sin puesto — completar en Expedientes</em>'}</div>
+            ${e.email?`<div class="at-meta">📧 ${e.email}</div>`:''}
+            ${e.ingreso&&vac?`<div class="at-meta">📅 Ingreso: ${fmt(e.ingreso)} &nbsp;·&nbsp;
+              🏖️ <strong style="color:${vac.disp<0?'var(--red)':vac.disp<=3?'var(--orange)':'var(--green)'}">${vac.disp} días vac.</strong> &nbsp;·&nbsp;
+              ⭐ <strong style="color:${pd.disp<=0?'var(--red)':pd.disp===1?'var(--orange)':'var(--green)'}">${pd.disp} PD</strong>
+            </div>`:'<div class="at-meta" style="color:var(--g400);font-style:italic">Datos laborales pendientes en Expedientes</div>'}
           </div>
-          <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
-            <button class="btn-edit" onclick="openEditColab('${e.cedula}')">✏️ Editar</button>
-            <button class="btn-cancel-req" onclick="openDeleteColab('${e.cedula}','${e.nombre.replace(/'/g,"\\'")}')">🗑️ Eliminar</button>
+          <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;min-width:120px">
+            <button class="btn-edit" style="width:100%;font-size:12px" onclick="openAccesoModal('${e.cedula}','${ns}','${e.acceso||'activo'}')">🔑 Acceso</button>
+            <button class="btn-cancel-req" style="width:100%;font-size:12px" onclick="openDeleteColab('${e.cedula}','${ns}')">🗑️ Eliminar</button>
           </div>
         </div>
       </div>`;
@@ -1199,55 +1211,37 @@ function renderColabList() {
 }
 
 function openNuevoColab() {
-  document.getElementById('colabModalTitle').textContent = '➕ Nuevo Colaborador';
+  document.getElementById('colabModalTitle').textContent = '➕ Nuevo Ingreso';
   document.getElementById('colab-mode').value = 'new';
-  ['colab-nombre','colab-cedula','colab-email','colab-puesto'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('colab-ingreso').value = '';
-  document.getElementById('colab-consumidos').value = '0';
-  document.getElementById('colab-pdUsados').value = '0';
+  ['colab-nombres','colab-ap1','colab-ap2','colab-cedula'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
+  document.getElementById('colab-acceso').value = 'activo';
   document.getElementById('colab-cedula').readOnly = false;
   openModal('colabModal');
 }
 
-function openEditColab(cedula) {
-  const e = EMPLOYEES.find(e => e.cedula === cedula);
-  if (!e) return;
-  document.getElementById('colabModalTitle').textContent = '✏️ Editar Colaborador';
-  document.getElementById('colab-mode').value = 'edit';
-  document.getElementById('colab-nombre').value    = e.nombre;
-  document.getElementById('colab-cedula').value    = e.cedula;
-  document.getElementById('colab-email').value     = e.email;
-  document.getElementById('colab-puesto').value    = e.puesto;
-  document.getElementById('colab-ingreso').value   = e.ingreso;
-  document.getElementById('colab-consumidos').value = e.consumidos;
-  document.getElementById('colab-pdUsados').value  = e.pdUsados;
-  document.getElementById('colab-cedula').readOnly = true; // no se puede cambiar cédula
-  openModal('colabModal');
-}
-
 async function saveColab() {
-  const mode     = document.getElementById('colab-mode').value;
-  const cedula   = document.getElementById('colab-cedula').value.trim().replace(/[-.\s]/g,'');
-  const nombre   = document.getElementById('colab-nombre').value.trim();
-  const email    = document.getElementById('colab-email').value.trim();
-  const puesto   = document.getElementById('colab-puesto').value.trim();
-  const ingreso  = document.getElementById('colab-ingreso').value;
-  const consumidos = parseFloat(document.getElementById('colab-consumidos').value)||0;
-  const pdUsados   = parseFloat(document.getElementById('colab-pdUsados').value)||0;
+  const cedula  = document.getElementById('colab-cedula').value.trim().replace(/[-.\s]/g,'');
+  const nombres = document.getElementById('colab-nombres').value.trim();
+  const ap1     = document.getElementById('colab-ap1').value.trim();
+  const ap2     = document.getElementById('colab-ap2').value.trim();
+  const acceso  = document.getElementById('colab-acceso').value;
 
-  if (!cedula||!nombre||!email||!puesto||!ingreso) {
-    alert('Complete todos los campos obligatorios'); return;
+  if (!cedula||!nombres||!ap1) {
+    alert('Complete al menos nombre(s), primer apellido y cédula'); return;
   }
-  if (mode==='new' && EMPLOYEES.find(e=>e.cedula===cedula)) {
+  if (EMPLOYEES.find(e=>e.cedula===cedula)) {
     alert('Ya existe un colaborador con esa cédula'); return;
   }
 
-  showOverlay(mode==='new'?'Agregando colaborador...':'Actualizando colaborador...');
+  const nombre = [nombres, ap1, ap2].filter(Boolean).join(' ');
+  showOverlay('Registrando colaborador...');
   const res = await callGAS({
-    action: mode==='new' ? 'addEmpleado' : 'updateEmpleado',
-    cedula, nombre, puesto, ingreso,
-    consumidos, email, pdTotal:3, pdUsados,
-    pdAnio: new Date().getFullYear()
+    action:'addEmpleado', cedula, nombre,
+    puesto:'', ingreso:'', consumidos:0,
+    email:'', pdTotal:3, pdUsados:0,
+    pdAnio: new Date().getFullYear(), acceso
   });
   closeModal('colabModal');
 
@@ -1255,29 +1249,64 @@ async function saveColab() {
     await loadEmployees();
     renderColabList();
     refreshEmpSelect();
-    toast(mode==='new'?'✅ Colaborador agregado':'✅ Colaborador actualizado', nombre);
+    toast('✅ Colaborador registrado', nombre + ' ya puede ingresar con cédula ' + cedula);
   } else {
-    toast('❌ Error', 'No se pudo guardar en Sheets');
+    hideOverlay();
+    toast('❌ Error', (res&&res.error)||'No se pudo guardar en Sheets');
   }
 }
 
+// ── Gestión de acceso ──
+function openAccesoModal(cedula, nombre, accesoActual) {
+  document.getElementById('accesoModalTitle').textContent = '🔑 Acceso — ' + nombre.split(' ')[0];
+  document.getElementById('accesoColabName').textContent  = nombre;
+  document.getElementById('accesoCedula').value           = cedula;
+  document.getElementById('accesoSelect').value           = accesoActual || 'activo';
+  openModal('accesoModal');
+}
+
+async function confirmAcceso() {
+  const cedula = document.getElementById('accesoCedula').value;
+  const acceso = document.getElementById('accesoSelect').value;
+  showOverlay('Actualizando acceso...');
+  const res = await callGAS({action:'updateEmpleado', cedula, acceso});
+  closeModal('accesoModal');
+  if (res && res.ok) {
+    await loadEmployees();
+    renderColabList();
+    toast(
+      acceso==='activo' ? '✅ Acceso habilitado' : '🚫 Acceso deshabilitado',
+      acceso==='activo' ? 'El colaborador puede ingresar al portal' : 'El colaborador no puede ingresar al portal'
+    );
+  } else {
+    toast('❌ Error', 'No se pudo actualizar el acceso');
+  }
+}
+
+// ── Eliminar — doble confirmación ──
 function openDeleteColab(cedula, nombre) {
   colabToDelete = cedula;
   document.getElementById('deleteColabName').textContent = nombre;
   openModal('deleteColabModal');
 }
 
+function openDeleteColab2() {
+  const nombre = document.getElementById('deleteColabName').textContent;
+  document.getElementById('deleteColabName2').textContent = nombre;
+  closeModal('deleteColabModal');
+  openModal('deleteColabModal2');
+}
+
 async function confirmDeleteColab() {
   if (!colabToDelete) return;
+  closeModal('deleteColabModal2');
   showOverlay('Eliminando colaborador...');
   const res = await callGAS({action:'deleteEmpleado', cedula:colabToDelete});
-  closeModal('deleteColabModal');
-
   if (res && res.ok) {
     await loadEmployees();
     renderColabList();
     refreshEmpSelect();
-    toast('🗑️ Colaborador eliminado', 'Los datos fueron removidos del Sheet');
+    toast('🗑️ Colaborador eliminado', 'Removido del sistema');
   } else {
     toast('❌ Error', 'No se pudo eliminar del Sheet');
   }

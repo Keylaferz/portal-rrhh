@@ -361,13 +361,16 @@
     <!-- Admin: Colaboradores -->
     <div class="tab-panel" id="admin-tab-colaboradores">
       <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
           <div>
-            <h2 class="card-title" style="margin:0">👥 Gestión de Colaboradores</h2>
-            <p class="card-sub" style="margin:4px 0 0">Agregue, edite o elimine colaboradores · Los cambios se sincronizan con Google Sheets</p>
+            <h2 class="card-title" style="margin:0">👥 Colaboradores Registrados</h2>
+            <p class="card-sub" style="margin:4px 0 0">Gestione acceso al portal · Complete datos en Expedientes</p>
           </div>
-          <button class="btn-submit" onclick="openNuevoColab()">➕ Nuevo colaborador</button>
+          <button class="btn-submit" onclick="openNuevoColab()">➕ Nuevo ingreso</button>
         </div>
+        <input type="text" id="colabSearch" placeholder="🔍 Buscar por nombre o cédula..."
+          oninput="renderColabList()"
+          style="width:100%;padding:10px 14px;border:1.5px solid var(--b200);border-radius:10px;font-size:13px;margin-bottom:14px;box-sizing:border-box;outline:none"/>
         <div id="colabList"></div>
       </div>
     </div>
@@ -377,49 +380,89 @@
 </div>
 
 
-<!-- Modal: Nuevo/Editar Colaborador -->
+<!-- Modal: Nuevo Ingreso -->
 <div class="modal-overlay" id="colabModal">
-  <div class="modal" style="max-width:560px">
+  <div class="modal" style="max-width:480px">
     <div class="modal-header">
-      <h3 class="modal-title" id="colabModalTitle">➕ Nuevo Colaborador</h3>
+      <h3 class="modal-title" id="colabModalTitle">➕ Nuevo Ingreso</h3>
       <button class="modal-close" onclick="closeModal('colabModal')">✕</button>
     </div>
-    <div class="form-row">
-      <div class="fg"><label>Nombre completo</label><input type="text" id="colab-nombre" placeholder="Nombre Apellido1 Apellido2"/></div>
+    <p style="font-size:12px;color:var(--g400);margin-bottom:14px">Con estos datos el colaborador ya puede ingresar al portal con su cédula. El resto de información se completa en Expedientes.</p>
+    <div class="form-row-3">
+      <div class="fg"><label>Nombre(s)</label><input type="text" id="colab-nombres" placeholder="Ej: María Fernanda"/></div>
+      <div class="fg"><label>Primer apellido</label><input type="text" id="colab-ap1" placeholder="Ej: Zeledón"/></div>
+      <div class="fg"><label>Segundo apellido</label><input type="text" id="colab-ap2" placeholder="Ej: Barrios"/></div>
     </div>
     <div class="form-row">
-      <div class="fg"><label>Cédula</label><input type="text" id="colab-cedula" placeholder="111320139"/></div>
-      <div class="fg"><label>Correo corporativo</label><input type="email" id="colab-email" placeholder="nombre@leancr.com"/></div>
-    </div>
-    <div class="form-row">
-      <div class="fg"><label>Puesto</label><input type="text" id="colab-puesto" placeholder="Ej: Project Engineer"/></div>
-      <div class="fg"><label>Fecha de ingreso</label><input type="date" id="colab-ingreso"/></div>
-    </div>
-    <div class="form-row">
-      <div class="fg"><label>Días vacaciones consumidos (histórico)</label><input type="number" id="colab-consumidos" placeholder="0" min="0" step="0.5"/></div>
-      <div class="fg"><label>Personal Days usados este año</label><input type="number" id="colab-pdUsados" placeholder="0" min="0" max="3" step="0.5"/></div>
+      <div class="fg"><label>Número de cédula</label><input type="text" id="colab-cedula" placeholder="117870532" maxlength="15"/></div>
+      <div class="fg"><label>Acceso al portal</label>
+        <select id="colab-acceso">
+          <option value="activo">✅ Activo — puede ingresar</option>
+          <option value="inactivo">🚫 Inactivo — sin acceso</option>
+        </select>
+      </div>
     </div>
     <input type="hidden" id="colab-mode" value="new"/>
     <div class="modal-actions">
       <button class="btn-sec" onclick="closeModal('colabModal')">Cancelar</button>
-      <button class="btn-submit" onclick="saveColab()">💾 Guardar</button>
+      <button class="btn-submit" onclick="saveColab()">💾 Registrar colaborador</button>
     </div>
   </div>
 </div>
 
-<!-- Modal: Confirmar eliminación colaborador -->
+<!-- Modal: Confirmar eliminación colaborador — paso 1 -->
 <div class="modal-overlay" id="deleteColabModal">
   <div class="modal" style="max-width:440px">
     <div class="modal-header">
       <h3 class="modal-title">🗑️ Eliminar colaborador</h3>
       <button class="modal-close" onclick="closeModal('deleteColabModal')">✕</button>
     </div>
-    <p style="font-size:14px;color:var(--g600);margin-bottom:8px">¿Está seguro que desea eliminar a:</p>
-    <p style="font-size:16px;font-weight:700;color:var(--red);margin-bottom:16px" id="deleteColabName"></p>
-    <p style="font-size:12px;color:var(--g400)">⚠️ Esta acción no se puede deshacer. Las solicitudes existentes del colaborador se conservan en el historial.</p>
+    <p style="font-size:14px;color:var(--g600);margin-bottom:8px">¿Desea eliminar a:</p>
+    <p style="font-size:16px;font-weight:700;color:var(--red);margin-bottom:12px" id="deleteColabName"></p>
+    <p style="font-size:12px;color:var(--g400)">⚠️ Esta acción eliminará al colaborador del sistema. Sus solicitudes históricas se conservan.</p>
     <div class="modal-actions">
       <button class="btn-sec" onclick="closeModal('deleteColabModal')">Cancelar</button>
-      <button class="btn-danger" onclick="confirmDeleteColab()">🗑️ Confirmar eliminación</button>
+      <button class="btn-danger" onclick="openDeleteColab2()">Continuar →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Confirmar eliminación colaborador — paso 2 (doble confirmación) -->
+<div class="modal-overlay" id="deleteColabModal2">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <h3 class="modal-title" style="color:var(--red)">⚠️ Confirmación final</h3>
+      <button class="modal-close" onclick="closeModal('deleteColabModal2')">✕</button>
+    </div>
+    <p style="font-size:15px;font-weight:600;color:var(--g700);margin-bottom:8px">Esta es su segunda y última confirmación.</p>
+    <p style="font-size:14px;color:var(--g600);margin-bottom:8px">Va a eliminar permanentemente a:</p>
+    <p style="font-size:16px;font-weight:700;color:var(--red);margin-bottom:12px" id="deleteColabName2"></p>
+    <p style="font-size:12px;color:var(--red);font-weight:600">🚨 Esta acción NO se puede deshacer.</p>
+    <div class="modal-actions">
+      <button class="btn-sec" onclick="closeModal('deleteColabModal2')">Cancelar</button>
+      <button class="btn-danger" onclick="confirmDeleteColab()">🗑️ Sí, eliminar definitivamente</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Cambiar acceso colaborador -->
+<div class="modal-overlay" id="accesoModal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h3 class="modal-title" id="accesoModalTitle">🔑 Gestionar acceso</h3>
+      <button class="modal-close" onclick="closeModal('accesoModal')">✕</button>
+    </div>
+    <p style="font-size:14px;color:var(--g600);margin-bottom:6px" id="accesoColabName"></p>
+    <div class="fg" style="margin-top:12px"><label>Estado de acceso</label>
+      <select id="accesoSelect">
+        <option value="activo">✅ Activo — puede ingresar al portal</option>
+        <option value="inactivo">🚫 Inactivo — sin acceso al portal</option>
+      </select>
+    </div>
+    <input type="hidden" id="accesoCedula"/>
+    <div class="modal-actions">
+      <button class="btn-sec" onclick="closeModal('accesoModal')">Cancelar</button>
+      <button class="btn-submit" onclick="confirmAcceso()">💾 Guardar acceso</button>
     </div>
   </div>
 </div>
