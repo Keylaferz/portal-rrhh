@@ -466,7 +466,7 @@ function submitRequest(){
 // ══════════════════════════════
 function buildDet(t){
   const d=t.details||{};
-  let s=`Período: ${fmt(d.inicio)} al ${fmt(d.fin)}\nDías hábiles: ${d.dias}`;
+  let s=`Período: ${fmt(d.inicio)} al ${fmt(d.fin)}\nDías solicitados: ${d.dias}`;
   if(d.excluidos>0) s+=` (${d.excluidos} excluido(s))`;
   if(d.turno)       s+=`\nTurno: ${d.turno}`;
   if(t.tipo==='incapacidad') s+=`\nTipo: ${d.tipo||''}\nMédico: ${d.medico||'No indicado'}`;
@@ -1016,7 +1016,7 @@ function renderFullHistory(){
               ${t.editCount>0?`<span class="edit-counter">✏️ editada ${t.editCount}x</span>`:''}
             </div>
             <div style="font-size:12px;color:var(--g600);margin-top:3px">
-              📅 ${fmt(t.details.inicio)} → ${fmt(t.details.fin)} · <strong>${t.details.dias} días hábiles</strong>
+              📅 ${fmt(t.details.inicio)} → ${fmt(t.details.fin)} · <strong>${t.details.dias} días solicitados</strong>
               ${t.details.turno?` · ${t.details.turno}`:''}
             </div>
             ${t.notaAdmin?`<div style="font-size:11px;color:var(--b700);margin-top:2px">📝 RRHH: ${t.notaAdmin}</div>`:''}
