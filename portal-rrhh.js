@@ -355,6 +355,8 @@ function doLogout(){
 function show(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
+  const ft = document.querySelector('footer');
+  if(ft) ft.style.display = (id==='loginScreen') ? 'none' : 'block';
 }
 
 // ══════════════════════════════
