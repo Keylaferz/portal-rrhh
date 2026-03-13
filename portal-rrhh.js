@@ -310,21 +310,29 @@ async function doLogin(){
   updateStats(); renderTickets(); updateVacTab(); renderExpView();
 }
 
-function doAdminLogin(){
-  const u=document.getElementById('adminUser').value.trim();
-  const p=document.getElementById('adminPass').value;
-  const err=document.getElementById('loginError');
-  // Valida contra GAS si hay URL, sino local
-  if(GAS_URL && GAS_URL !== 'PEGUE_SU_URL_GAS_AQUI'){
-    fetch(`${GAS_URL}?action=authAdmin&user=${encodeURIComponent(u)}&pass=${encodeURIComponent(p)}`)
-      .then(r=>r.json()).then(res=>{
-        if(res.ok) initAdmin();
-        else { err.style.display='block'; err.textContent='⚠️ Credenciales incorrectas.'; }
-      }).catch(()=>{ err.style.display='block'; err.textContent='⚠️ Error de conexión con el servidor.'; });
-  } else {
-    if(u==='admin'&&p==='rrhh2024') initAdmin();
-    else { err.style.display='block'; err.textContent='⚠️ Credenciales incorrectas.'; }
+async function doAdminLogin(){
+  const u   = document.getElementById('adminUser').value.trim();
+  const p   = document.getElementById('adminPass').value;
+  const err = document.getElementById('loginError');
+  err.style.display = 'none';
+
+  // Primero intenta validar contra GAS
+  if(GAS_URL){
+    try {
+      const res = await callGAS({action:'authAdmin', user:u, pass:p}, true);
+      if(res && res.ok){ initAdmin(); return; }
+      // Si GAS responde pero credenciales incorrectas
+      err.style.display='block';
+      err.textContent='⚠️ Credenciales incorrectas.';
+      return;
+    } catch(e){
+      // GAS falló — usar fallback local
+    }
   }
+  // Fallback local
+  if(u==='admin' && p==='rrhh2024'){ initAdmin(); return; }
+  err.style.display='block';
+  err.textContent='⚠️ Credenciales incorrectas.';
 }
 
 async function initAdmin(){
@@ -520,17 +528,17 @@ async function confirmSend(){
   clearForm(); updateStats(); renderTickets(); pendingTicket=null;
 }
 
-async function callGAS(params){
+async function callGAS(params, silent=false){
   if(!GAS_URL||GAS_URL==='PEGUE_SU_URL_GAS_AQUI') return null;
-  document.getElementById('sendingOverlay').classList.add('active');
+  if(!silent) document.getElementById('sendingOverlay').classList.add('active');
   try{
     const url=`${GAS_URL}?${new URLSearchParams(params)}`;
     const res=await fetch(url);
     const data=await res.json();
-    document.getElementById('sendingOverlay').classList.remove('active');
+    if(!silent) document.getElementById('sendingOverlay').classList.remove('active');
     return data;
   }catch(e){
-    document.getElementById('sendingOverlay').classList.remove('active');
+    if(!silent) document.getElementById('sendingOverlay').classList.remove('active');
     return null;
   }
 }
