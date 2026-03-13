@@ -414,18 +414,26 @@ function submitRequest(){
   if(days===0){alert('El rango no contiene días hábiles.');return;}
 
   let details={};
+  // Ajuste medio día: si el turno es media mañana o media tarde, vale 0.5
+  function ajustarDias(d, turno) {
+    return (turno==='Media mañana'||turno==='Media tarde') ? 0.5 : d;
+  }
+
   if(currentType==='vacaciones'){
+    const turnoVac = getField('vac-mod');
+    const diasVac  = ajustarDias(days, turnoVac);
     const vac=calcVac(currentUser);
-    // Advertir si no hay saldo suficiente pero aun permite enviar (admin decide)
-    if(days>vac.disp){
-      const ok=confirm(`⚠️ Atención: tiene ${vac.disp} día(s) disponibles aprobados y solicita ${days}.\n\nPuede enviar la solicitud y RRHH la revisará.\n\n¿Desea continuar?`);
+    if(diasVac>vac.disp){
+      const ok=confirm(`⚠️ Atención: tiene ${vac.disp} día(s) disponibles aprobados y solicita ${diasVac}.\n\nPuede enviar la solicitud y RRHH la revisará.\n\n¿Desea continuar?`);
       if(!ok) return;
     }
-    details={inicio:ini,fin,dias:days,turno:getField('vac-mod'),excluidos:excluded.length};
+    details={inicio:ini,fin,dias:diasVac,turno:turnoVac,excluidos:excluded.length};
   } else if(currentType==='incapacidad'){
-    details={inicio:ini,fin,dias:days,tipo:getField('inc-tipo'),medico:getField('inc-med'),turno:getField('inc-turno'),excluidos:excluded.length};
+    const turnoInc = getField('inc-turno');
+    details={inicio:ini,fin,dias:ajustarDias(days,turnoInc),tipo:getField('inc-tipo'),medico:getField('inc-med'),turno:turnoInc,excluidos:excluded.length};
   } else if(currentType==='cumpleanos'){
-    details={inicio:ini,fin,dias:days,turno:getField('cum-turno'),excluidos:excluded.length};
+    const turnoCum = getField('cum-turno');
+    details={inicio:ini,fin,dias:ajustarDias(days,turnoCum),turno:turnoCum,excluidos:excluded.length};
   } else if(currentType==='personalday'){
     const pd=calcPD(currentUser);
     const turno=getField('per-turno');
