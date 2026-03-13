@@ -389,25 +389,3 @@ function deleteEmpleado(cedula) {
   return { ok: false, error: 'Empleado no encontrado: ' + cedula };
 }
 
-// ══════════════════════════════════════════════════════
-//  FUNCIÓN DE PRUEBA — Ejecutar manualmente desde el editor
-//  Seleccione "testCorreo" en el dropdown y presione ▶
-// ══════════════════════════════════════════════════════
-function testCorreo() {
-  const resultado = sendEmailAction({
-    to: 'kfernandez@leancr.com',
-    asunto: 'Prueba Portal RRHH',
-    estado: '✅ APROBADA',
-    ticket_id: 'TKT-TEST',
-    empleado: 'Prueba Manual',
-    cedula: '000000000',
-    puesto: 'Test',
-    tipo: '🏖️ Vacaciones',
-    fecha: '12/03/2026',
-    detalles: 'Período: 01/04/2026 al 05/04/2026\nDías hábiles: 5',
-    observaciones: 'Prueba directa desde GAS',
-    nota_admin: 'Test exitoso',
-    msg_extra: 'Este es un correo de prueba.'
-  });
-  Logger.log('Resultado: ' + JSON.stringify(resultado));
-}
