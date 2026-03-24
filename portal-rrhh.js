@@ -33,7 +33,20 @@ function getCache(key) {
 }
 
 function clearCache() {
-  ['hr_employees','hr_tickets','hr_expedientes'].forEach(k => localStorage.removeItem(k));
+  // Elimina todas las claves del portal (incluye claves por usuario)
+  Object.keys(localStorage)
+    .filter(k => k.startsWith('hr_'))
+    .forEach(k => localStorage.removeItem(k));
+}
+
+// ── PROTECCIÓN XSS — escapa caracteres HTML en datos externos ──
+function escHTML(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
 }
 
 // ── VALIDACIÓN DE INPUTS ──
@@ -132,29 +145,30 @@ const fmt = d => {
   if(d instanceof Date) return d.toLocaleDateString('es-CR');
   return d;
 };
-const tid    = () => 'TKT-'+Date.now().toString().slice(-6);
+const tid    = () => 'TKT-'+Date.now().toString(36).toUpperCase().slice(-5)+Math.random().toString(36).slice(2,5).toUpperCase();
 const tlabel     = t => ({vacaciones:'🏖️ Vacaciones',incapacidad:'🏥 Incapacidad',cumpleanos:'🎂 Cumpleaños',personalday:'⭐ Personal Day',singoce:'📤 Día Sin Goce'}[t]||t);
 const tlabelText = t => ({vacaciones:'Vacaciones',incapacidad:'Incapacidad',cumpleanos:'Cumpleanos',personalday:'Personal Day',singoce:'Sin Goce'}[t]||t);
 const slabel = s => ({pending:'⏳ En Proceso',inprogress:'🔄 En Gestión',approved:'✅ Aprobada',denied:'❌ Denegada',cancelled:'🚫 Cancelada'}[s]||s);
 const sbadge = s => `<span class="sb ${s||'pending'}">${slabel(s)}</span>`;
-// Guarda en Google Sheets vía GAS (localStorage solo como caché offline)
-const save    = () => saveCache('hr_tickets', tickets);
-const saveExp = () => saveCache('hr_expedientes', expedientes);
+// Guarda en caché local — clave por usuario para evitar colisiones en PC compartidas
+const save    = () => {
+  const key = currentUser ? `hr_tickets_${currentUser.cedula}` : 'hr_tickets_all';
+  saveCache(key, tickets);
+};
+const saveExp = () => {
+  // No se cachean campos sensibles (IBAN, salario, datos médicos)
+  if(!currentUser) return;
+  const exp = expedientes[currentUser.cedula];
+  if(!exp) return;
+  const safe = Object.assign({}, exp);
+  ['iban','salario','meds','alergias'].forEach(f => delete safe[f]);
+  saveCache(`hr_expedientes_${currentUser.cedula}`, safe);
+};
 
 // ── GAS API ──
+// gasGet: lectura silenciosa (sin overlay) — delega a callGAS
 async function gasGet(params) {
-  if(!GAS_URL||GAS_URL==='PEGUE_SU_URL_GAS_AQUI') return null;
-  try {
-    const controller = new AbortController();
-    const timeoutId  = setTimeout(() => controller.abort(), 12000);
-    const url = `${GAS_URL}?${new URLSearchParams(params)}`;
-    const res  = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeoutId);
-    return await res.json();
-  } catch(e) {
-    if(e.name==='AbortError') toast('⚠️ Tiempo de espera','El servidor tardó demasiado. Intente de nuevo.','warning');
-    return null;
-  }
+  return callGAS(params, true);
 }
 const getField = (id,def='') => { const el=document.getElementById(id); return el?el.value:def; };
 const fmtMoney = v => v ? '₡ '+parseFloat(v).toLocaleString('es-CR') : '—';
@@ -196,7 +210,8 @@ function calcBirthday(emp) {
   const anio = new Date().getFullYear();
   const used = tickets
     .filter(t => t.cedula === emp.cedula && t.tipo === 'cumpleanos' && t.status === 'approved')
-    .filter(t => t.fecha && t.fecha.startsWith(String(anio)))
+    // Usar la fecha del día tomado (details.inicio), no la fecha de envío de la solicitud
+    .filter(t => t.details && t.details.inicio && t.details.inicio.startsWith(String(anio)))
     .reduce((s, t) => s + (parseFloat(t.details.dias) || 1), 0);
   const disp = Math.max(0, 1 - used);
   return { total: 1, used, disp };
@@ -229,17 +244,20 @@ async function loadUserData(cedula) {
   const resT = await gasGet({action:'getTickets', cedula});
   if(resT && resT.ok && resT.data) {
     tickets = resT.data.map(parseTicket);
-    save();
+    saveCache(`hr_tickets_${cedula}`, tickets);
   } else {
-    tickets = (getCache('hr_tickets') || []).filter(t=>t.cedula===cedula);
+    tickets = (getCache(`hr_tickets_${cedula}`) || []).filter(t=>t.cedula===cedula);
   }
-  // Cargar expediente
+  // Cargar expediente — no se cachean campos sensibles (IBAN, salario, médico)
   const resE = await gasGet({action:'getExpediente', cedula});
   if(resE && resE.ok && resE.data) {
     expedientes[cedula] = resE.data;
-    saveExp();
+    const safe = Object.assign({}, resE.data);
+    ['iban','salario','meds','alergias'].forEach(f => delete safe[f]);
+    saveCache(`hr_expedientes_${cedula}`, safe);
   } else {
-    expedientes = getCache('hr_expedientes') || {};
+    const cached = getCache(`hr_expedientes_${cedula}`);
+    if(cached) expedientes[cedula] = cached;
   }
   hideOverlay();
 }
@@ -249,9 +267,9 @@ async function loadAllTickets() {
   const resT = await gasGet({action:'getTickets'});
   if(resT && resT.ok && resT.data) {
     tickets = resT.data.map(parseTicket);
-    save();
+    saveCache('hr_tickets_all', tickets);
   } else {
-    tickets = getCache('hr_tickets') || [];
+    tickets = getCache('hr_tickets_all') || [];
   }
   hideOverlay();
 }
@@ -398,7 +416,8 @@ async function doAdminLogin(){
 async function initAdmin(){
   document.getElementById('loginError').style.display='none';
   isAdmin=true;
-  sessionStorage.setItem('hr_session', JSON.stringify({isAdmin: true}));
+  // La sesión admin expira en 8 horas
+  sessionStorage.setItem('hr_session', JSON.stringify({isAdmin: true, exp: Date.now() + 8*60*60*1000}));
   show('adminScreen');
   document.getElementById('adminList').innerHTML='<div class="empty-state"><div class="empty-icon">⏳</div><div>Cargando datos...</div></div>';
   // Cargar empleados y tickets desde Sheets
@@ -415,7 +434,15 @@ function refreshEmpSelect(){
       .map(e=>`<option value="${e.cedula}">${e.nombre}</option>`).join('');
 }
 
-function doLogout(){
+async function doLogout(){
+  if(currentType) {
+    const ok = await showConfirm(
+      '⏏ Cerrar sesión',
+      'Tiene una solicitud en progreso. Si sale ahora, <strong>perderá los datos ingresados</strong>.<br><br>¿Desea salir de todas formas?',
+      'Salir', true
+    );
+    if(!ok) return;
+  }
   currentUser=null; isAdmin=false; currentType=null;
   sessionStorage.removeItem('hr_session');
   clearCache();
@@ -437,25 +464,33 @@ function show(id){
 // TABS
 // ══════════════════════════════
 function showTab(id,btn){
+  // Advertir si hay un formulario activo que se perdería
+  if(currentType && id !== 'nueva') {
+    if(!confirm('Tiene una solicitud en progreso. ¿Desea cambiar de pestaña y perder los datos ingresados?')) return;
+    clearForm();
+  }
   document.querySelectorAll('#appScreen .tab-panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('#appScreen .tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
+  if(btn && !btn.dataset.orig) btn.dataset.orig = btn.textContent;
   if(btn) btn.classList.add('active');
-  // Solo recarga desde el servidor si el caché ya venció; si no, usa datos en memoria
-  const cacheOk = getCache('hr_tickets') !== null;
-  if(id==='historial'){
-    if(cacheOk){ renderTickets(); }
-    else { loadUserData(currentUser.cedula).then(()=>{ renderTickets(); updateStats(); }); }
+
+  // Solo recarga desde GAS si el caché del usuario expiró
+  const cacheOk = currentUser && getCache(`hr_tickets_${currentUser.cedula}`) !== null;
+
+  function withLoad(renderFn) {
+    if(cacheOk) { renderFn(); return; }
+    if(btn) { btn.textContent='⏳'; btn.disabled=true; }
+    loadUserData(currentUser.cedula).then(() => {
+      renderFn(); updateStats();
+      if(btn) { btn.disabled=false; btn.textContent=btn.dataset.orig||btn.textContent; }
+    });
   }
-  if(id==='desglose')  { updateVacTab(); }
-  if(id==='expediente'){
-    if(cacheOk){ renderExpView(); }
-    else { loadUserData(currentUser.cedula).then(()=>{ renderExpView(); }); }
-  }
-  if(id==='historial_completo'){
-    if(cacheOk){ renderFullHistory(); }
-    else { loadUserData(currentUser.cedula).then(()=>{ renderFullHistory(); }); }
-  }
+
+  if(id==='historial')          { withLoad(renderTickets); }
+  if(id==='desglose')           { updateVacTab(); }
+  if(id==='expediente')         { withLoad(renderExpView); }
+  if(id==='historial_completo') { withLoad(renderFullHistory); }
 }
 
 function showAdminTab(id,btn){
@@ -476,6 +511,15 @@ function selType(t){
   document.querySelectorAll('[id^="days-counter-"]').forEach(d=>d.style.display='none');
   document.getElementById('fields-'+t).style.display='block';
   document.getElementById('formFields').style.display='block';
+  // Establecer fecha mínima = hoy en todos los inputs de fecha del tipo seleccionado
+  const today = new Date().toISOString().split('T')[0];
+  const f = typeFields[t];
+  if(f) {
+    const iniEl = document.getElementById(f.ini);
+    const finEl = document.getElementById(f.fin);
+    if(iniEl) iniEl.min = today;
+    if(finEl) finEl.min = today;
+  }
 }
 
 function clearForm(){
@@ -754,8 +798,8 @@ function renderAdmin(){
     return`<div class="admin-ticket">
       <div class="at-head">
         <div>
-          <div class="at-name">${t.empleado}</div>
-          <div class="at-meta">${t.puesto} · <strong>${t.id}</strong> · ${fmt(t.fecha)}${emp?` · 📧 ${emp.email}`:''}</div>
+          <div class="at-name">${escHTML(t.empleado)}</div>
+          <div class="at-meta">${escHTML(t.puesto)} · <strong>${escHTML(t.id)}</strong> · ${fmt(t.fecha)}${emp?` · 📧 ${escHTML(emp.email)}`:''}</div>
           ${vi}
           ${t.tipo==='singoce'?`<div class="at-meta" style="color:var(--orange)">⚠️ Sin goce: no descuenta vacaciones, sí descuenta salario</div>`:''}
           ${t.editCount?`<div class="at-meta">✏️ Editada ${t.editCount}x</div>`:''}
@@ -767,8 +811,8 @@ function renderAdmin(){
         <div class="at-detail">
           <strong>${tlabel(t.tipo)}</strong><br>
           ${buildDet(t).replace(/\n/g,'<br>')}
-          ${t.obs?`<br><em style="color:var(--g400)">💬 ${t.obs}</em>`:''}
-          ${t.notaAdmin?`<br><span style="color:var(--b700);font-weight:600">📝 RRHH: ${t.notaAdmin}</span>`:''}
+          ${t.obs?`<br><em style="color:var(--g400)">💬 ${escHTML(t.obs)}</em>`:''}
+          ${t.notaAdmin?`<br><span style="color:var(--b700);font-weight:600">📝 RRHH: ${escHTML(t.notaAdmin)}</span>`:''}
         </div>
         <div class="at-btns">
           ${!resolved?`
@@ -1217,41 +1261,73 @@ function updateStats(){
 
 function updateVacTab(){
   if(!currentUser) return;
-  const v=calcVac(currentUser);
-  const pd=calcPD(currentUser);
+  const v    = calcVac(currentUser);
+  const pd   = calcPD(currentUser);
+  const bday = calcBirthday(currentUser);
 
   // Vacaciones
-  document.getElementById('vacIngreso').textContent=fmtLong(currentUser.ingreso);
-  document.getElementById('vacMeses').textContent=v.meses;
-  document.getElementById('vacAcum').textContent=v.acum;
-  document.getElementById('vacCons').textContent=v.usados;
-  const dEl=document.getElementById('vacDisp');
-  dEl.textContent=v.disp<0?v.disp+' ⚠️':v.disp;
-  dEl.style.color=v.disp<0?'var(--red)':v.disp<=3?'var(--orange)':'var(--green)';
-  const prog=document.getElementById('vacProg');
-  prog.style.width=v.pct+'%';
-  prog.style.background=v.pct>=100?'linear-gradient(90deg,var(--orange),var(--red))':
-    v.pct>=80?'linear-gradient(90deg,var(--orange),#F59E0B)':'linear-gradient(90deg,var(--b400),var(--b600))';
-  document.getElementById('vacProx').textContent=fmt(v.prox);
+  document.getElementById('vacIngreso').textContent = fmtLong(currentUser.ingreso);
+  document.getElementById('vacMeses').textContent   = v.meses;
+  document.getElementById('vacAcum').textContent    = v.acum;
+  document.getElementById('vacCons').textContent    = v.usados;
+  const dEl = document.getElementById('vacDisp');
+  dEl.textContent  = v.disp < 0 ? v.disp+' ⚠️' : v.disp;
+  dEl.style.color  = v.disp < 0 ? 'var(--red)' : v.disp <= 3 ? 'var(--orange)' : 'var(--green)';
+  const prog = document.getElementById('vacProg');
+  prog.style.width      = v.pct+'%';
+  prog.style.background = v.pct>=100 ? 'linear-gradient(90deg,var(--orange),var(--red))' :
+    v.pct>=80 ? 'linear-gradient(90deg,var(--orange),#F59E0B)' : 'linear-gradient(90deg,var(--b400),var(--b600))';
+  document.getElementById('vacProx').textContent = fmt(v.prox);
+
+  // Cumpleaños
+  const bdayTotalEl = document.getElementById('bdayTotal');
+  const bdayUsadoEl = document.getElementById('bdayUsado');
+  const bdayDispEl  = document.getElementById('bdayDisp');
+  if(bdayTotalEl) bdayTotalEl.textContent = bday.total;
+  if(bdayUsadoEl) bdayUsadoEl.textContent = bday.used;
+  if(bdayDispEl) {
+    bdayDispEl.textContent = bday.disp <= 0 ? '0 ✓' : bday.disp;
+    bdayDispEl.style.color = bday.disp <= 0 ? 'var(--green)' : 'var(--g800)';
+  }
 
   // Personal Days
-  const pdTotalEl =document.getElementById('pdTotal');
-  const pdUsadosEl=document.getElementById('pdUsados');
-  const pdDispEl  =document.getElementById('pdDisp');
-  if(pdTotalEl)  pdTotalEl.textContent=pd.total;
-  if(pdUsadosEl) pdUsadosEl.textContent=pd.usados;
-  if(pdDispEl){
-    pdDispEl.textContent=pd.disp<=0?'0 ⚠️':pd.disp;
-    pdDispEl.style.color=pd.disp<=0?'var(--red)':pd.disp===1?'var(--orange)':'var(--green)';
+  const pdTotalEl  = document.getElementById('pdTotal');
+  const pdUsadosEl = document.getElementById('pdUsados');
+  const pdDispEl   = document.getElementById('pdDisp');
+  if(pdTotalEl)  pdTotalEl.textContent  = pd.total;
+  if(pdUsadosEl) pdUsadosEl.textContent = pd.usados;
+  if(pdDispEl) {
+    pdDispEl.textContent = pd.disp <= 0 ? '0 ⚠️' : pd.disp;
+    pdDispEl.style.color = pd.disp <= 0 ? 'var(--red)' : pd.disp===1 ? 'var(--orange)' : 'var(--green)';
   }
-  // Aviso vencimiento — aplica para todos (PD no acumulables, vencen 31/12)
-  const venceMsg=document.getElementById('pdVenceMsg');
-  if(venceMsg){
-    venceMsg.style.display='block';
+  // Aviso vencimiento PD
+  const venceMsg = document.getElementById('pdVenceMsg');
+  if(venceMsg) {
+    venceMsg.style.display = 'block';
     const dispTxt = pd.disp <= 0
       ? `Ya utilizó todos sus Personal Days de ${pd.anio}.`
       : `Tiene <strong>${pd.disp}</strong> Personal Day(s) disponible(s). Vencen el <strong>31/12/${pd.anio}</strong> — no son acumulables.`;
     venceMsg.innerHTML = `⚠️ ${dispTxt}`;
+  }
+
+  // Lista de vacaciones aprobadas
+  const vacListEl = document.getElementById('vacListAprobadas');
+  if(vacListEl) {
+    const aprobadas = tickets
+      .filter(t => t.cedula === currentUser.cedula && t.tipo === 'vacaciones' && t.status === 'approved')
+      .sort((a,b) => (b.details.inicio||'').localeCompare(a.details.inicio||''));
+    if(!aprobadas.length) {
+      vacListEl.innerHTML = '<p class="vac-list-empty">No hay vacaciones aprobadas registradas.</p>';
+    } else {
+      vacListEl.innerHTML = aprobadas.map(t => `
+        <div class="vac-list-row">
+          <div>
+            <div class="vac-list-dates">${fmt(t.details.inicio)} → ${fmt(t.details.fin)}</div>
+            <div class="vac-list-meta">${escHTML(t.details.turno||'Día completo')} · ${escHTML(t.id)}</div>
+          </div>
+          <div class="vac-list-days">−${t.details.dias} día(s)</div>
+        </div>`).join('');
+    }
   }
 }
 
@@ -1327,14 +1403,14 @@ function renderColabList() {
         <div class="at-head">
           <div style="flex:1">
             <div class="at-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              ${e.nombre}
+              ${escHTML(e.nombre)}
               <span style="font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600;
                 background:${acceso?'#D1FAE5':'#FEE2E2'};color:${acceso?'#065F46':'#991B1B'}">
                 ${acceso?'✅ Activo':'🚫 Sin acceso'}
               </span>
             </div>
-            <div class="at-meta">Cédula: <strong>${e.cedula}</strong>${e.puesto?' &nbsp;·&nbsp; '+e.puesto:' &nbsp;·&nbsp; <em style="color:var(--g400)">Sin puesto — completar en Expedientes</em>'}</div>
-            ${e.email?`<div class="at-meta">📧 ${e.email}</div>`:''}
+            <div class="at-meta">Cédula: <strong>${escHTML(e.cedula)}</strong>${e.puesto?' &nbsp;·&nbsp; '+escHTML(e.puesto):' &nbsp;·&nbsp; <em style="color:var(--g400)">Sin puesto — completar en Expedientes</em>'}</div>
+            ${e.email?`<div class="at-meta">📧 ${escHTML(e.email)}</div>`:''}
             ${e.ingreso&&vac?`<div class="at-meta">📅 Ingreso: ${fmt(e.ingreso)} &nbsp;·&nbsp;
               🏖️ <strong style="color:${vac.disp<0?'var(--red)':vac.disp<=3?'var(--orange)':'var(--green)'}">${vac.disp} días vac.</strong> &nbsp;·&nbsp;
               ⭐ <strong style="color:${pd.disp<=0?'var(--red)':pd.disp===1?'var(--orange)':'var(--green)'}">${pd.disp} PD</strong>
@@ -1464,7 +1540,11 @@ async function restoreSession() {
   try {
     const s = JSON.parse(saved);
     if (s.isAdmin) {
-      // Restaurar sesión admin sin re-autenticar (ya validada)
+      // Verificar que la sesión admin no haya expirado (8 horas)
+      if (!s.exp || Date.now() > s.exp) {
+        sessionStorage.removeItem('hr_session');
+        return;
+      }
       isAdmin = true;
       show('adminScreen');
       await loadEmployees();

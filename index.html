@@ -218,6 +218,17 @@
           <div class="vac-card"><div class="vac-num" id="vacDisp">—</div><div class="vac-unit">días disponibles</div><div class="vac-lbl">Saldo actual</div></div>
         </div>
       </div>
+      <!-- Cumpleaños -->
+      <div class="card">
+        <h2 class="card-title">🎂 Mi Día de Cumpleaños</h2>
+        <p class="card-sub">1 día libre por año · Se descuenta al aprobarse</p>
+        <div class="vac-grid">
+          <div class="vac-card"><div class="vac-num" id="bdayTotal">1</div><div class="vac-unit">por año</div><div class="vac-lbl">Total asignado</div></div>
+          <div class="vac-card"><div class="vac-num" id="bdayUsado" style="color:var(--orange)">—</div><div class="vac-unit">utilizado</div><div class="vac-lbl">Año actual</div></div>
+          <div class="vac-card"><div class="vac-num" id="bdayDisp">—</div><div class="vac-unit">disponible</div><div class="vac-lbl">Saldo actual</div></div>
+        </div>
+      </div>
+
       <!-- Personal Days -->
       <div class="card">
         <h2 class="card-title">⭐ Mis Personal Days</h2>
@@ -228,6 +239,13 @@
           <div class="vac-card"><div class="vac-num" id="pdDisp">—</div><div class="vac-unit">disponibles</div><div class="vac-lbl">Saldo actual</div></div>
         </div>
         <div id="pdVenceMsg" style="display:none;margin-top:10px;" class="warn-box"></div>
+      </div>
+
+      <!-- Vacaciones aprobadas -->
+      <div class="card">
+        <h2 class="card-title" style="font-size:16px">✅ Vacaciones Aprobadas</h2>
+        <p class="card-sub">Detalle de todos los períodos aprobados — origen del saldo descontado</p>
+        <div id="vacListAprobadas"></div>
       </div>
 
       <div class="card">
