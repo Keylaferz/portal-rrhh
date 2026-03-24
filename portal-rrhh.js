@@ -103,26 +103,40 @@ function countWorkdays(ini,fin,bdayStr){
 // ── EMPLOYEES — cargado dinámicamente desde Google Sheets ──
 let EMPLOYEES = []; // se llena al iniciar el portal
 
+function _mapEmployees(data) {
+  return data.map(e => ({
+    cedula:    String(e.cedula),
+    nombre:    e.nombre,
+    puesto:    e.puesto    || '',
+    ingreso:   e.ingreso   || '',
+    consumidos:parseFloat(e.consumidos)||0,
+    email:     e.email     || '',
+    emailcorp: e.emailcorp || e.email || '',
+    pdTotal:   parseFloat(e.pdTotal)||3,
+    pdUsados:  parseFloat(e.pdUsados)||0,
+    pdAnio:    parseInt(e.pdAnio)||new Date().getFullYear(),
+    acceso:    e.acceso    || 'activo',
+  }));
+}
+
 async function loadEmployees() {
+  const cached = getCache('hr_employees');
+  if (cached && cached.length > 0) {
+    EMPLOYEES = cached;
+    // Actualizar desde GAS en segundo plano sin bloquear
+    gasGet({action:'getEmpleados'}).then(res => {
+      if (res && res.ok && res.data && res.data.length > 0) {
+        EMPLOYEES = _mapEmployees(res.data);
+        saveCache('hr_employees', EMPLOYEES);
+      }
+    });
+    return;
+  }
+  // Sin caché — esperar respuesta de GAS
   const res = await gasGet({action:'getEmpleados'});
   if (res && res.ok && res.data && res.data.length > 0) {
-    EMPLOYEES = res.data.map(e => ({
-      cedula:    String(e.cedula),
-      nombre:    e.nombre,
-      puesto:    e.puesto    || '',
-      ingreso:   e.ingreso   || '',
-      consumidos:parseFloat(e.consumidos)||0,
-      email:     e.email     || '',
-      emailcorp: e.emailcorp || e.email || '',
-      pdTotal:   parseFloat(e.pdTotal)||3,
-      pdUsados:  parseFloat(e.pdUsados)||0,
-      pdAnio:    parseInt(e.pdAnio)||new Date().getFullYear(),
-      acceso:    e.acceso    || 'activo',
-    }));
+    EMPLOYEES = _mapEmployees(res.data);
     saveCache('hr_employees', EMPLOYEES);
-  } else {
-    const cached = getCache('hr_employees');
-    if (cached) EMPLOYEES = cached;
   }
 }
 
@@ -178,7 +192,7 @@ function getEmpBirthday(emp){
 }
 
 function calcVac(emp){
-  const hoy=new Date(),ini=new Date(emp.ingreso);
+  const hoy=new Date(),ini=parseDate(emp.ingreso)||new Date();
   let m=(hoy.getFullYear()-ini.getFullYear())*12+(hoy.getMonth()-ini.getMonth());
   if(hoy.getDate()<ini.getDate()) m--;
   if(m<0) m=0;
@@ -195,10 +209,23 @@ function calcVac(emp){
   return{meses:m,acum,usados:u,disp,pct:Math.min(100,Math.round((u/Math.max(acum,1))*100)),prox};
 }
 
+// ── PARSER DE FECHAS — soporta YYYY-MM-DD y DD/MM/YYYY (formato del Sheet) ──
+function parseDate(dateStr) {
+  if (!dateStr) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return new Date(dateStr + 'T12:00:00');
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+    const [day, month, year] = dateStr.split('/');
+    return new Date(`${year}-${month}-${day}T12:00:00`);
+  }
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 // ── FECHA LARGA EN ESPAÑOL ──
 function fmtLong(dateStr) {
   if (!dateStr) return '—';
-  const d = new Date(dateStr + 'T12:00:00');
+  const d = parseDate(dateStr);
+  if (!d || isNaN(d.getTime())) return dateStr || '—';
   const dias   = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
   const meses  = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   return `${dias[d.getDay()]} ${d.getDate()} de ${meses[d.getMonth()]} del ${d.getFullYear()}`;
@@ -387,9 +414,22 @@ async function doLogin(){
   document.getElementById('userName').textContent  =emp.nombre.split(' ').slice(0,2).join(' ');
   document.getElementById('userCedula').textContent='Cédula: '+emp.cedula;
   document.getElementById('userAvatar').textContent=emp.nombre[0];
-  // Cargar datos desde Sheets
-  await loadUserData(emp.cedula);
-  updateStats(); renderTickets(); updateVacTab(); renderExpView();
+  // Si hay caché del usuario, mostrar pantalla de inmediato
+  const cachedTickets = getCache(`hr_tickets_${emp.cedula}`);
+  if (cachedTickets) {
+    tickets = cachedTickets;
+    const cachedExp = getCache(`hr_expedientes_${emp.cedula}`);
+    if (cachedExp) expedientes[emp.cedula] = cachedExp;
+    updateStats(); renderTickets(); updateVacTab(); renderExpView();
+    // Actualizar desde GAS en segundo plano sin bloquear la UI
+    loadUserData(emp.cedula).then(() => {
+      updateStats(); renderTickets(); updateVacTab(); renderExpView();
+    });
+  } else {
+    // Primera vez o caché expirado — esperar GAS
+    await loadUserData(emp.cedula);
+    updateStats(); renderTickets(); updateVacTab(); renderExpView();
+  }
 }
 
 async function doAdminLogin(){
