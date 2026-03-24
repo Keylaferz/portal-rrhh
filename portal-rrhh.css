@@ -489,3 +489,19 @@ footer strong { color: var(--b700); }
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-thumb { background: var(--b200); border-radius: 3px; }
+
+/* ── TOAST — tipos ── */
+#toast.toast-success { border-left-color: var(--green); }
+#toast.toast-error   { border-left-color: var(--red); }
+#toast.toast-warning { border-left-color: var(--orange); }
+#toast.toast-info    { border-left-color: var(--b500); }
+
+/* ── BANNER OFFLINE ── */
+#offlineBanner {
+  display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 500;
+  background: linear-gradient(135deg, #92400E, #B45309);
+  color: #FEF3C7; padding: 9px 20px;
+  text-align: center; font-size: 13px; font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15); letter-spacing: .3px;
+}
+#offlineBanner.visible { display: block; }

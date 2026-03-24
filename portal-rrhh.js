@@ -6,6 +6,46 @@
 // ── CONFIG — pegue aquí su URL del GAS ──
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyjKE7f4DXlVxBOmZHK6vGSYWQhONQgJkzuB-JslWP_89v-xhyuP74AjDYt8QiKC94w/exec';
 
+// ── CONFIG NOTIFICACIONES ──
+// Para cambiar los correos mostrados en el modal de resolución,
+// edite este valor (solo afecta el texto informativo visible al admin).
+const RRHH_EMAILS_LABEL = 'kfernandez, cfernandez';
+
+// ── CACHE CON TTL ──
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
+function saveCache(key, data) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() }));
+  } catch(e) { /* quota excedida — ignorar */ }
+}
+
+function getCache(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const item = JSON.parse(raw);
+    // Compatibilidad con formato antiguo (sin envelope TTL)
+    if (!item || typeof item !== 'object' || !('ts' in item) || !('data' in item)) return null;
+    if (Date.now() - item.ts > CACHE_TTL) { localStorage.removeItem(key); return null; }
+    return item.data;
+  } catch(e) { return null; }
+}
+
+function clearCache() {
+  ['hr_employees','hr_tickets','hr_expedientes'].forEach(k => localStorage.removeItem(k));
+}
+
+// ── VALIDACIÓN DE INPUTS ──
+function validateCedula(v) {
+  const clean = String(v).replace(/[-.\s]/g,'');
+  return /^\d{8,12}$/.test(clean);
+}
+
+function sanitizeText(v) {
+  return String(v).replace(/<[^>]*>/g,'').trim();
+}
+
 // ── FERIADOS COSTA RICA ──
 function getCRHolidays(year) {
   const fixed = [
@@ -65,14 +105,11 @@ async function loadEmployees() {
       pdUsados:  parseFloat(e.pdUsados)||0,
       pdAnio:    parseInt(e.pdAnio)||new Date().getFullYear(),
       acceso:    e.acceso    || 'activo',
-      emailcorp: e.emailcorp  || '',
     }));
-    // Caché local
-    localStorage.setItem('hr_employees', JSON.stringify(EMPLOYEES));
+    saveCache('hr_employees', EMPLOYEES);
   } else {
-    // Fallback a caché local
-    const cached = localStorage.getItem('hr_employees');
-    if (cached) EMPLOYEES = JSON.parse(cached);
+    const cached = getCache('hr_employees');
+    if (cached) EMPLOYEES = cached;
   }
 }
 
@@ -101,17 +138,23 @@ const tlabelText = t => ({vacaciones:'Vacaciones',incapacidad:'Incapacidad',cump
 const slabel = s => ({pending:'⏳ En Proceso',inprogress:'🔄 En Gestión',approved:'✅ Aprobada',denied:'❌ Denegada',cancelled:'🚫 Cancelada'}[s]||s);
 const sbadge = s => `<span class="sb ${s||'pending'}">${slabel(s)}</span>`;
 // Guarda en Google Sheets vía GAS (localStorage solo como caché offline)
-const save    = () => localStorage.setItem('hr_tickets',JSON.stringify(tickets));
-const saveExp = () => localStorage.setItem('hr_expedientes',JSON.stringify(expedientes));
+const save    = () => saveCache('hr_tickets', tickets);
+const saveExp = () => saveCache('hr_expedientes', expedientes);
 
 // ── GAS API ──
 async function gasGet(params) {
   if(!GAS_URL||GAS_URL==='PEGUE_SU_URL_GAS_AQUI') return null;
   try {
+    const controller = new AbortController();
+    const timeoutId  = setTimeout(() => controller.abort(), 12000);
     const url = `${GAS_URL}?${new URLSearchParams(params)}`;
-    const res  = await fetch(url);
+    const res  = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
     return await res.json();
-  } catch(e) { return null; }
+  } catch(e) {
+    if(e.name==='AbortError') toast('⚠️ Tiempo de espera','El servidor tardó demasiado. Intente de nuevo.','warning');
+    return null;
+  }
 }
 const getField = (id,def='') => { const el=document.getElementById(id); return el?el.value:def; };
 const fmtMoney = v => v ? '₡ '+parseFloat(v).toLocaleString('es-CR') : '—';
@@ -136,6 +179,27 @@ function calcVac(emp){
   const disp=Math.round((acum-u)*10)/10;
   const prox=new Date(hoy.getFullYear(),hoy.getMonth()+1,ini.getDate());
   return{meses:m,acum,usados:u,disp,pct:Math.min(100,Math.round((u/Math.max(acum,1))*100)),prox};
+}
+
+// ── FECHA LARGA EN ESPAÑOL ──
+function fmtLong(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr + 'T12:00:00');
+  const dias   = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const meses  = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  return `${dias[d.getDay()]} ${d.getDate()} de ${meses[d.getMonth()]} del ${d.getFullYear()}`;
+}
+
+// ── DÍA DE CUMPLEAÑOS ──
+// 1 día por año · Se descuenta al aprobar solicitud de tipo 'cumpleanos'
+function calcBirthday(emp) {
+  const anio = new Date().getFullYear();
+  const used = tickets
+    .filter(t => t.cedula === emp.cedula && t.tipo === 'cumpleanos' && t.status === 'approved')
+    .filter(t => t.fecha && t.fecha.startsWith(String(anio)))
+    .reduce((s, t) => s + (parseFloat(t.details.dias) || 1), 0);
+  const disp = Math.max(0, 1 - used);
+  return { total: 1, used, disp };
 }
 
 // ── PERSONAL DAYS ──
@@ -165,11 +229,9 @@ async function loadUserData(cedula) {
   const resT = await gasGet({action:'getTickets', cedula});
   if(resT && resT.ok && resT.data) {
     tickets = resT.data.map(parseTicket);
-    save(); // caché local
+    save();
   } else {
-    // Fallback a localStorage si no hay conexión
-    tickets = JSON.parse(localStorage.getItem('hr_tickets')||'[]')
-      .filter(t=>t.cedula===cedula);
+    tickets = (getCache('hr_tickets') || []).filter(t=>t.cedula===cedula);
   }
   // Cargar expediente
   const resE = await gasGet({action:'getExpediente', cedula});
@@ -177,7 +239,7 @@ async function loadUserData(cedula) {
     expedientes[cedula] = resE.data;
     saveExp();
   } else {
-    expedientes = JSON.parse(localStorage.getItem('hr_expedientes')||'{}');
+    expedientes = getCache('hr_expedientes') || {};
   }
   hideOverlay();
 }
@@ -189,7 +251,7 @@ async function loadAllTickets() {
     tickets = resT.data.map(parseTicket);
     save();
   } else {
-    tickets = JSON.parse(localStorage.getItem('hr_tickets')||'[]');
+    tickets = getCache('hr_tickets') || [];
   }
   hideOverlay();
 }
@@ -292,15 +354,17 @@ function switchLoginTab(t,btn){
 }
 
 async function doLogin(){
-  // Asegurar que los empleados estén cargados
   if(EMPLOYEES.length===0) await loadEmployees();
-  const v=document.getElementById('cedulaInput').value.trim().replace(/[-.\s]/g,'');
-  const emp=EMPLOYEES.find(e=>e.cedula===v);
+  const raw=document.getElementById('cedulaInput').value.trim();
+  const v=raw.replace(/[-.\s]/g,'');
   const err=document.getElementById('loginError');
+  if(!validateCedula(v)){err.style.display='block';err.textContent='⚠️ Ingrese una cédula válida (8–12 dígitos).';return;}
+  const emp=EMPLOYEES.find(e=>e.cedula===v);
   if(!emp){err.style.display='block';err.textContent='⚠️ Cédula no encontrada.';return;}
   if(emp.acceso==='inactivo'){err.style.display='block';err.textContent='🚫 Su acceso al portal ha sido deshabilitado. Contacte a RRHH.';return;}
   err.style.display='none';
   currentUser=emp; isAdmin=false;
+  sessionStorage.setItem('hr_session', JSON.stringify({cedula: emp.cedula}));
   show('appScreen');
   document.getElementById('userName').textContent  =emp.nombre.split(' ').slice(0,2).join(' ');
   document.getElementById('userCedula').textContent='Cédula: '+emp.cedula;
@@ -316,21 +380,17 @@ async function doAdminLogin(){
   const err = document.getElementById('loginError');
   err.style.display = 'none';
 
-  // Primero intenta validar contra GAS
+  // Validar contra GAS — única fuente de verdad
   if(GAS_URL){
-    try {
-      const res = await callGAS({action:'authAdmin', user:u, pass:p}, true);
-      if(res && res.ok){ initAdmin(); return; }
-      // Si GAS responde pero credenciales incorrectas
+    const res = await callGAS({action:'authAdmin', user:u, pass:p}, true);
+    if(res && res.ok){ initAdmin(); return; }
+    if(!res){
+      // GAS no respondió (timeout, red caída)
       err.style.display='block';
-      err.textContent='⚠️ Credenciales incorrectas.';
+      err.textContent='⚠️ No se pudo conectar al servidor. Verifique su conexión.';
       return;
-    } catch(e){
-      // GAS falló — usar fallback local
     }
   }
-  // Fallback local
-  if(u==='admin' && p==='rrhh2024'){ initAdmin(); return; }
   err.style.display='block';
   err.textContent='⚠️ Credenciales incorrectas.';
 }
@@ -338,6 +398,7 @@ async function doAdminLogin(){
 async function initAdmin(){
   document.getElementById('loginError').style.display='none';
   isAdmin=true;
+  sessionStorage.setItem('hr_session', JSON.stringify({isAdmin: true}));
   show('adminScreen');
   document.getElementById('adminList').innerHTML='<div class="empty-state"><div class="empty-icon">⏳</div><div>Cargando datos...</div></div>';
   // Cargar empleados y tickets desde Sheets
@@ -356,6 +417,8 @@ function refreshEmpSelect(){
 
 function doLogout(){
   currentUser=null; isAdmin=false; currentType=null;
+  sessionStorage.removeItem('hr_session');
+  clearCache();
   show('loginScreen');
   document.getElementById('cedulaInput').value='';
   document.getElementById('adminUser').value='';
@@ -378,10 +441,21 @@ function showTab(id,btn){
   document.querySelectorAll('#appScreen .tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
   if(btn) btn.classList.add('active');
-  if(id==='historial') { loadUserData(currentUser.cedula).then(()=>{renderTickets();}); }
+  // Solo recarga desde el servidor si el caché ya venció; si no, usa datos en memoria
+  const cacheOk = getCache('hr_tickets') !== null;
+  if(id==='historial'){
+    if(cacheOk){ renderTickets(); }
+    else { loadUserData(currentUser.cedula).then(()=>{ renderTickets(); updateStats(); }); }
+  }
   if(id==='desglose')  { updateVacTab(); }
-  if(id==='expediente'){ loadUserData(currentUser.cedula).then(()=>{renderExpView();}); }
-  if(id==='historial_completo'){ loadUserData(currentUser.cedula).then(()=>{renderFullHistory();}); }
+  if(id==='expediente'){
+    if(cacheOk){ renderExpView(); }
+    else { loadUserData(currentUser.cedula).then(()=>{ renderExpView(); }); }
+  }
+  if(id==='historial_completo'){
+    if(cacheOk){ renderFullHistory(); }
+    else { loadUserData(currentUser.cedula).then(()=>{ renderFullHistory(); }); }
+  }
 }
 
 function showAdminTab(id,btn){
@@ -413,19 +487,18 @@ function clearForm(){
   document.getElementById('obs').value='';
 }
 
-function submitRequest(){
-  if(!currentType){alert('Seleccione un tipo de solicitud');return;}
-  const obs=getField('obs');
+async function submitRequest(){
+  if(!currentType){toast('⚠️ Acción requerida','Seleccione un tipo de solicitud','warning');return;}
+  const obs=sanitizeText(getField('obs'));
   const bday=getEmpBirthday(currentUser);
   const f=typeFields[currentType];
   const ini=getField(f.ini),fin=getField(f.fin);
-  if(!ini||!fin){alert('Complete las fechas de inicio y fin');return;}
-  if(fin<ini){alert('La fecha fin no puede ser anterior al inicio');return;}
+  if(!ini||!fin){toast('⚠️ Fechas requeridas','Complete las fechas de inicio y fin','warning');return;}
+  if(fin<ini){toast('⚠️ Fecha inválida','La fecha fin no puede ser anterior al inicio','warning');return;}
   const{days,excluded}=countWorkdays(ini,fin,bday);
-  if(days===0){alert('El rango no contiene días hábiles.');return;}
+  if(days===0){toast('⚠️ Sin días hábiles','El rango seleccionado no contiene días hábiles','warning');return;}
 
   let details={};
-  // Ajuste medio día: si el turno es media mañana o media tarde, vale 0.5
   function ajustarDias(d, turno) {
     return (turno==='Media mañana'||turno==='Media tarde') ? 0.5 : d;
   }
@@ -435,32 +508,39 @@ function submitRequest(){
     const diasVac  = ajustarDias(days, turnoVac);
     const vac=calcVac(currentUser);
     if(diasVac>vac.disp){
-      const ok=confirm(`⚠️ Atención: tiene ${vac.disp} día(s) disponibles aprobados y solicita ${diasVac}.\n\nPuede enviar la solicitud y RRHH la revisará.\n\n¿Desea continuar?`);
+      const ok=await showConfirm(
+        '⚠️ Días insuficientes',
+        `Tiene <strong>${vac.disp}</strong> día(s) disponibles y solicita <strong>${diasVac}</strong>.<br><br>Puede enviar la solicitud y RRHH la revisará.`,
+        'Continuar de todas formas', true
+      );
       if(!ok) return;
     }
     details={inicio:ini,fin,dias:diasVac,turno:turnoVac,excluidos:excluded.length};
   } else if(currentType==='incapacidad'){
     const turnoInc = getField('inc-turno');
-    details={inicio:ini,fin,dias:ajustarDias(days,turnoInc),tipo:getField('inc-tipo'),medico:getField('inc-med'),turno:turnoInc,excluidos:excluded.length};
+    details={inicio:ini,fin,dias:ajustarDias(days,turnoInc),tipo:getField('inc-tipo'),medico:sanitizeText(getField('inc-med')),turno:turnoInc,excluidos:excluded.length};
   } else if(currentType==='cumpleanos'){
     const turnoCum = getField('cum-turno');
     details={inicio:ini,fin,dias:ajustarDias(days,turnoCum),turno:turnoCum,excluidos:excluded.length};
   } else if(currentType==='personalday'){
     const pd=calcPD(currentUser);
     const turno=getField('per-turno');
-    // Media mañana o media tarde = 0.5 días, día completo = días hábiles normales
     const diasPD = (turno==='Media mañana'||turno==='Media tarde') ? 0.5 : days;
     if(pd.disp<=0){
-      alert(`⚠️ Ya no tiene Personal Days disponibles este año.\nUsados: ${pd.usados} / ${pd.total}`);
+      toast('⚠️ Sin Personal Days',`No tiene Personal Days disponibles este año. Usados: ${pd.usados} / ${pd.total}`,'warning');
       return;
     }
     if(diasPD>pd.disp){
-      const ok=confirm(`⚠️ Tiene ${pd.disp} Personal Day(s) disponible(s) y solicita ${diasPD}.\n\n¿Desea continuar de todas formas?`);
+      const ok=await showConfirm(
+        '⚠️ Personal Days insuficientes',
+        `Tiene <strong>${pd.disp}</strong> Personal Day(s) disponible(s) y solicita <strong>${diasPD}</strong>.<br><br>¿Desea continuar de todas formas?`,
+        'Continuar de todas formas', true
+      );
       if(!ok) return;
     }
     details={inicio:ini,fin,dias:diasPD,turno,motivo:getField('per-mot'),excluidos:excluded.length};
   } else if(currentType==='singoce'){
-    details={inicio:ini,fin,dias:days,turno:getField('sg-turno'),motivo:getField('sg-mot'),excluidos:excluded.length};
+    details={inicio:ini,fin,dias:days,turno:getField('sg-turno'),motivo:sanitizeText(getField('sg-mot')),excluidos:excluded.length};
   }
 
   pendingTicket={
@@ -532,13 +612,17 @@ async function callGAS(params, silent=false){
   if(!GAS_URL||GAS_URL==='PEGUE_SU_URL_GAS_AQUI') return null;
   if(!silent) document.getElementById('sendingOverlay').classList.add('active');
   try{
+    const controller = new AbortController();
+    const timeoutId  = setTimeout(() => controller.abort(), 12000);
     const url=`${GAS_URL}?${new URLSearchParams(params)}`;
-    const res=await fetch(url);
+    const res=await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
     const data=await res.json();
     if(!silent) document.getElementById('sendingOverlay').classList.remove('active');
     return data;
   }catch(e){
     if(!silent) document.getElementById('sendingOverlay').classList.remove('active');
+    if(e.name==='AbortError') toast('⚠️ Tiempo de espera','El servidor tardó demasiado. Intente de nuevo.','warning');
     return null;
   }
 }
@@ -565,7 +649,7 @@ async function confirmEdit(){
   const t=tickets.find(t=>t.id===editData.ticketId); if(!t) return;
   const ini=getField('edit-ini'),fin=getField('edit-fin');
   const turno=getField('edit-turno'),reason=getField('edit-reason');
-  if(!ini||!fin||fin<ini){alert('Verifique las fechas');return;}
+  if(!ini||!fin||fin<ini){toast('⚠️ Fechas inválidas','Verifique las fechas de inicio y fin','warning');return;}
   const bday=getEmpBirthday(currentUser);
   const{days}=countWorkdays(ini,fin,bday);
   t.details.inicio=ini; t.details.fin=fin; t.details.dias=days; t.details.turno=turno;
@@ -714,6 +798,8 @@ function openResolve(ticketId,action){
   document.getElementById('resolveTitle').textContent   =ia?'✅ Aprobar solicitud':'❌ Denegar solicitud';
   document.getElementById('resolveSubtitle').textContent=`${t.empleado} · ${tlabel(t.tipo)} · ${t.id}${emp?` · → ${emp.email}`:''}`;
   document.getElementById('resolveNote').value='';
+  const noteEl=document.getElementById('resolveEmailNote');
+  if(noteEl) noteEl.textContent=`⚡ Se enviarán correos a ${RRHH_EMAILS_LABEL} y al colaborador.`;
   const btn=document.getElementById('resolveBtn');
   btn.textContent=ia?'✅ Confirmar aprobación':'❌ Confirmar denegación';
   btn.style.background=ia?'linear-gradient(135deg,#10B981,#059669)':'linear-gradient(135deg,#EF4444,#DC2626)';
@@ -752,7 +838,7 @@ async function confirmResolve(){
 // ADMIN — Expedientes
 // ══════════════════════════════
 async function loadExpAdmin(){
-  const cedula=getField('expEmpSelect'); if(!cedula){alert('Seleccione un colaborador');return;}
+  const cedula=getField('expEmpSelect'); if(!cedula){toast('⚠️ Acción requerida','Seleccione un colaborador','warning');return;}
   const emp=EMPLOYEES.find(e=>e.cedula===cedula); if(!emp) return;
   showOverlay('Cargando expediente...');
   const resE = await gasGet({action:'getExpediente', cedula});
@@ -936,14 +1022,14 @@ function selectAllTickets(){
 function downloadSelectedPDF(){
   const ids=selectedTickets.size>0?[...selectedTickets]:tickets.filter(t=>t.cedula===currentUser.cedula).map(t=>t.id);
   const sel=tickets.filter(t=>ids.includes(t.id));
-  if(!sel.length){alert('No hay solicitudes para descargar');return;}
+  if(!sel.length){toast('⚠️ Sin datos','No hay solicitudes para descargar','warning');return;}
   downloadTicketsPDF(sel,`Mis Solicitudes — ${currentUser.nombre}`);
 }
 
 function downloadSelectedCSV(){
   const ids=selectedTickets.size>0?[...selectedTickets]:tickets.filter(t=>t.cedula===currentUser.cedula).map(t=>t.id);
   const sel=tickets.filter(t=>ids.includes(t.id));
-  if(!sel.length){alert('No hay solicitudes para descargar');return;}
+  if(!sel.length){toast('⚠️ Sin datos','No hay solicitudes para descargar','warning');return;}
   downloadTicketsCSV(sel,`solicitudes_${currentUser.cedula}`);
 }
 
@@ -1109,11 +1195,18 @@ function updateStats(){
   const mine=tickets.filter(t=>t.cedula===currentUser.cedula);
   const vac=calcVac(currentUser);
   const pd =calcPD(currentUser);
+  const bday=calcBirthday(currentUser);
   const dEl=document.getElementById('statVac');
   dEl.textContent=vac.disp<0?vac.disp+' ⚠️':vac.disp;
   dEl.style.color=vac.disp<0?'var(--red)':vac.disp<=3?'var(--orange)':'var(--g800)';
   document.getElementById('statApro').textContent=mine.filter(t=>t.status==='approved').length;
   document.getElementById('statPend').textContent=mine.filter(t=>['pending','inprogress'].includes(t.status)).length;
+  // Día cumpleaños
+  const bdayEl=document.getElementById('statBday');
+  if(bdayEl){
+    bdayEl.textContent=bday.disp<=0?'0 ✓':bday.disp;
+    bdayEl.style.color=bday.disp<=0?'var(--green)':'var(--g800)';
+  }
   // Personal Days
   const pdEl=document.getElementById('statPD');
   if(pdEl){
@@ -1128,7 +1221,7 @@ function updateVacTab(){
   const pd=calcPD(currentUser);
 
   // Vacaciones
-  document.getElementById('vacIngreso').textContent=fmt(currentUser.ingreso);
+  document.getElementById('vacIngreso').textContent=fmtLong(currentUser.ingreso);
   document.getElementById('vacMeses').textContent=v.meses;
   document.getElementById('vacAcum').textContent=v.acum;
   document.getElementById('vacCons').textContent=v.usados;
@@ -1168,13 +1261,37 @@ function updateVacTab(){
 function openModal(id) {document.getElementById(id).classList.add('active');}
 function closeModal(id){document.getElementById(id).classList.remove('active');}
 
-function toast(title,msg){
+// type: 'success' | 'error' | 'warning' | 'info'
+function toast(title, msg, type='success'){
   document.getElementById('toastTitle').textContent=title;
   document.getElementById('toastMsg').textContent=msg;
   const el=document.getElementById('toast');
+  el.className=''; // limpiar tipo anterior
+  el.classList.add('toast-'+type);
   el.style.display='block';
+  el.setAttribute('aria-live','polite');
   clearTimeout(window._toastTimer);
   window._toastTimer=setTimeout(()=>el.style.display='none',5500);
+}
+
+// ── CONFIRM MODAL (reemplaza confirm() nativo) ──
+let _confirmResolve = null;
+
+function showConfirm(title, msg, confirmText='Confirmar', isDanger=false){
+  return new Promise(resolve => {
+    _confirmResolve = resolve;
+    document.getElementById('confirmModalTitle').textContent = title;
+    document.getElementById('confirmModalMsg').innerHTML    = msg;
+    const btn = document.getElementById('confirmModalBtn');
+    btn.textContent = confirmText;
+    btn.className   = isDanger ? 'btn-danger' : 'btn-submit';
+    openModal('confirmModal');
+  });
+}
+
+function _resolveConfirm(val){
+  closeModal('confirmModal');
+  if(_confirmResolve){ _confirmResolve(val); _confirmResolve=null; }
 }
 
 // ══════════════════════════════
@@ -1251,10 +1368,13 @@ async function saveColab() {
   const acceso  = document.getElementById('colab-acceso').value;
 
   if (!cedula||!nombres||!ap1) {
-    alert('Complete al menos nombre(s), primer apellido y cédula'); return;
+    toast('⚠️ Campos requeridos','Complete al menos nombre(s), primer apellido y cédula','warning'); return;
+  }
+  if (!validateCedula(cedula)) {
+    toast('⚠️ Cédula inválida','Ingrese una cédula válida (8–12 dígitos)','warning'); return;
   }
   if (EMPLOYEES.find(e=>e.cedula===cedula)) {
-    alert('Ya existe un colaborador con esa cédula'); return;
+    toast('⚠️ Cédula duplicada','Ya existe un colaborador con esa cédula','warning'); return;
   }
 
   const nombre = [nombres, ap1, ap2].filter(Boolean).join(' ');
@@ -1334,3 +1454,56 @@ async function confirmDeleteColab() {
   }
   colabToDelete = null;
 }
+
+// ══════════════════════════════
+// SESIÓN PERSISTENTE — restaurar al recargar
+// ══════════════════════════════
+async function restoreSession() {
+  const saved = sessionStorage.getItem('hr_session');
+  if (!saved) return;
+  try {
+    const s = JSON.parse(saved);
+    if (s.isAdmin) {
+      // Restaurar sesión admin sin re-autenticar (ya validada)
+      isAdmin = true;
+      show('adminScreen');
+      await loadEmployees();
+      await loadAllTickets();
+      populateEmpFilter(); renderAdmin(); refreshEmpSelect();
+    } else if (s.cedula) {
+      if (EMPLOYEES.length === 0) await loadEmployees();
+      const emp = EMPLOYEES.find(e => e.cedula === s.cedula);
+      if (!emp || emp.acceso === 'inactivo') { sessionStorage.removeItem('hr_session'); return; }
+      currentUser = emp; isAdmin = false;
+      show('appScreen');
+      document.getElementById('userName').textContent   = emp.nombre.split(' ').slice(0,2).join(' ');
+      document.getElementById('userCedula').textContent = 'Cédula: '+emp.cedula;
+      document.getElementById('userAvatar').textContent = emp.nombre[0];
+      await loadUserData(emp.cedula);
+      updateStats(); renderTickets(); updateVacTab(); renderExpView();
+    }
+  } catch(e) { sessionStorage.removeItem('hr_session'); }
+}
+
+// ══════════════════════════════
+// DETECCIÓN OFFLINE
+// ══════════════════════════════
+function _updateOfflineBanner() {
+  const banner = document.getElementById('offlineBanner');
+  if (!banner) return;
+  banner.classList.toggle('visible', !navigator.onLine);
+}
+
+window.addEventListener('online',  () => {
+  _updateOfflineBanner();
+  toast('✅ Conexión restaurada', 'Sincronizando datos en tiempo real', 'success');
+});
+window.addEventListener('offline', () => {
+  _updateOfflineBanner();
+  toast('⚠️ Sin conexión', 'Mostrando datos en caché local', 'warning');
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  _updateOfflineBanner();
+  restoreSession();
+});
