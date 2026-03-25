@@ -571,6 +571,17 @@ function clearForm(){
   document.getElementById('obs').value='';
 }
 
+// Detecta solapamiento con solicitudes existentes (pendiente, en gestión o aprobada)
+function hasOverlap(cedula, ini, fin, excludeId=null) {
+  return tickets.some(t =>
+    t.cedula === cedula &&
+    (excludeId ? t.id !== excludeId : true) &&
+    ['pending','inprogress','approved'].includes(t.status) &&
+    t.details && t.details.inicio && t.details.fin &&
+    t.details.inicio <= fin && t.details.fin >= ini
+  );
+}
+
 async function submitRequest(){
   if(!currentType){toast('⚠️ Acción requerida','Seleccione un tipo de solicitud','warning');return;}
   const obs=sanitizeText(getField('obs'));
@@ -581,6 +592,15 @@ async function submitRequest(){
   if(fin<ini){toast('⚠️ Fecha inválida','La fecha fin no puede ser anterior al inicio','warning');return;}
   const{days,excluded}=countWorkdays(ini,fin,bday);
   if(days===0){toast('⚠️ Sin días hábiles','El rango seleccionado no contiene días hábiles','warning');return;}
+  // Verificar solapamiento con solicitudes existentes
+  if(hasOverlap(currentUser.cedula, ini, fin)){
+    const ok = await showConfirm(
+      '⚠️ Período solapado',
+      'Ya tiene una solicitud <strong>pendiente, en gestión o aprobada</strong> que incluye fechas de este período.<br><br>¿Desea enviarla de todas formas?',
+      'Enviar de todas formas', true
+    );
+    if(!ok) return;
+  }
 
   let details={};
   function ajustarDias(d, turno) {
@@ -695,18 +715,32 @@ async function confirmSend(){
 async function callGAS(params, silent=false){
   if(!GAS_URL||GAS_URL==='PEGUE_SU_URL_GAS_AQUI') return null;
   if(!silent) document.getElementById('sendingOverlay').classList.add('active');
+  const hide = () => { if(!silent) document.getElementById('sendingOverlay').classList.remove('active'); };
   try{
     const controller = new AbortController();
     const timeoutId  = setTimeout(() => controller.abort(), 12000);
     const url=`${GAS_URL}?${new URLSearchParams(params)}`;
     const res=await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
-    const data=await res.json();
-    if(!silent) document.getElementById('sendingOverlay').classList.remove('active');
+    // Verificar código HTTP antes de parsear
+    if(!res.ok){
+      hide();
+      if(!silent) toast('⚠️ Error del servidor',`El servidor respondió con error ${res.status}. Intente de nuevo.`,'warning');
+      return null;
+    }
+    let data;
+    try { data = await res.json(); }
+    catch(je){
+      hide();
+      if(!silent) toast('⚠️ Respuesta inválida','El servidor devolvió una respuesta inesperada.','warning');
+      return null;
+    }
+    hide();
     return data;
   }catch(e){
-    if(!silent) document.getElementById('sendingOverlay').classList.remove('active');
+    hide();
     if(e.name==='AbortError') toast('⚠️ Tiempo de espera','El servidor tardó demasiado. Intente de nuevo.','warning');
+    else if(!silent) toast('⚠️ Error de red','Verifique su conexión e intente de nuevo.','warning');
     return null;
   }
 }
@@ -962,6 +996,22 @@ async function loadExpAdmin(){
 
 async function saveExpAdmin(){
   const cedula=getField('exp-cedula'); if(!cedula) return;
+  // Validar campos requeridos
+  const nombres=getField('exp-nombres').trim();
+  const ap1    =getField('exp-ap1').trim();
+  if(!nombres||!ap1){
+    toast('⚠️ Campos requeridos','Nombre(s) y Primer Apellido son obligatorios.','warning'); return;
+  }
+  // Validar formato de fecha de nacimiento si fue ingresada
+  const fnacVal=getField('exp-fnac').trim();
+  if(fnacVal && !/^\d{2}\/\d{2}\/\d{4}$/.test(fnacVal)){
+    toast('⚠️ Fecha inválida','La fecha de nacimiento debe ser DD/MM/YYYY — ejemplo: 30/01/1990','warning'); return;
+  }
+  // Validar email corporativo si fue ingresado
+  const emailcorpVal=getField('exp-emailcorp').trim();
+  if(emailcorpVal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailcorpVal)){
+    toast('⚠️ Correo inválido','El correo corporativo no tiene un formato válido.','warning'); return;
+  }
   expedientes[cedula]={
     nombres:   getField('exp-nombres'),  ap1:      getField('exp-ap1'),
     ap2:       getField('exp-ap2'),      genero:   getField('exp-genero'),
@@ -975,7 +1025,8 @@ async function saveExpAdmin(){
     salario:   getField('exp-salario'),
     profesion: getField('exp-profesion'),estudios: getField('exp-estudios'),
     meds:      getField('exp-meds'),     alergias: getField('exp-alergias'),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'admin'
   };
   saveExp();
   // Guardar en Google Sheets y confirmar
@@ -998,7 +1049,9 @@ function renderExpView(){
     el.innerHTML=`<div class="exp-empty"><div class="exp-icon">📋</div><p>Su expediente aún no ha sido completado por RRHH.<br>Contacte a su administrador.</p></div>`;
     return;
   }
-  const field=(label,val)=>`<div class="exp-field"><div class="exp-field-label">${label}</div><div class="exp-field-val ${!val?'empty':''}">${val||'No registrado'}</div></div>`;
+  const field=(label,val)=>`<div class="exp-field"><div class="exp-field-label">${label}</div><div class="exp-field-val ${!val?'empty':''}">${escHTML(val||'No registrado')}</div></div>`;
+  const maskIBAN = v => v ? v.slice(0,4)+' •••• •••• •••• '+v.slice(-4) : null;
+  const maskSal  = v => v ? '₡ ••••••' : null;
   el.innerHTML=`
     <div class="section-header"><div class="sh-icon">👤</div><h3>Datos Personales</h3></div>
     <div class="exp-grid">
@@ -1020,11 +1073,14 @@ function renderExpView(){
     </div>
     <div class="section-header"><div class="sh-icon">🏦</div><h3>Bancario y Laboral</h3></div>
     <div class="exp-grid">
-      ${field('IBAN',exp.iban)}${field('Profesión',exp.profesion)}${field('Otros Estudios',exp.estudios)}
+      ${field('IBAN',maskIBAN(exp.iban))}${field('Salario',maskSal(exp.salario))}${field('Profesión',exp.profesion)}${field('Otros Estudios',exp.estudios)}
     </div>
     <div class="section-header"><div class="sh-icon">🏥</div><h3>Médico</h3></div>
     <div class="exp-grid">${field('Medicamentos',exp.meds)}${field('Alergias',exp.alergias)}</div>
-    <p style="font-size:11px;color:var(--g400);margin-top:14px;text-align:right">Última actualización: ${exp.updatedAt?fmt(exp.updatedAt.split('T')[0]):'—'}</p>`;
+    <p style="font-size:11px;color:var(--g400);margin-top:14px;text-align:right">
+      Última actualización: ${exp.updatedAt?fmt(exp.updatedAt.split('T')[0]):'—'}
+      ${exp.updatedBy?' · por '+escHTML(exp.updatedBy):''}
+    </p>`;
 }
 
 // ══════════════════════════════
@@ -1241,7 +1297,11 @@ function downloadTicketsPDF(list, titulo){
   <div class="footer">© 2026 Lean Consulting S.A. — Portal de Recursos Humanos — Documento generado automáticamente</div>
   </body></html>`;
 
-  const w=window.open('','_blank');
+  const w = window.open('','_blank');
+  if(!w || w.closed || typeof w.closed === 'undefined') {
+    toast('⚠️ Ventana bloqueada','Active las ventanas emergentes (popups) en su navegador para descargar el PDF.','warning');
+    return;
+  }
   w.document.write(html);
   w.document.close();
   w.print();
@@ -1414,6 +1474,11 @@ function _resolveConfirm(val){
 // ADMIN — Gestión de Colaboradores
 // ══════════════════════════════
 let colabToDelete = null;
+let _colabSearchTimer = null;
+function debounceColabSearch() {
+  clearTimeout(_colabSearchTimer);
+  _colabSearchTimer = setTimeout(renderColabList, 220);
+}
 
 async function loadColabTab() {
   const el = document.getElementById('colabList');

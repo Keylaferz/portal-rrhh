@@ -516,3 +516,65 @@ footer strong { color: var(--b700); }
 .vac-list-days  { font-size: 16px; font-weight: 700; color: var(--b700); white-space: nowrap; margin-left: 12px; }
 .vac-list-empty { color: var(--g400); font-size: 13px; text-align: center; padding: 16px 0; }
 #offlineBanner.visible { display: block; }
+
+/* ══════════════════════════════════════════
+   RESPONSIVE — MÓVIL Y TABLET
+   ══════════════════════════════════════════ */
+
+/* Tablet (≤ 768px) */
+@media (max-width: 768px) {
+  .main { padding: 16px 12px; }
+
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+
+  .tabs { gap: 2px; }
+  .tab-btn { min-width: 70px; font-size: 11px; padding: 8px 6px; }
+
+  .topbar { padding: 0 14px; height: 56px; }
+  .topbar-title { font-size: 14px; }
+  .user-badge { padding: 5px 10px; }
+  .user-name { font-size: 12px; }
+
+  .admin-stats { grid-template-columns: repeat(2, 1fr); }
+
+  .vac-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Móvil (≤ 480px) */
+@media (max-width: 480px) {
+  .topbar { flex-wrap: wrap; height: auto; padding: 10px 12px; gap: 8px; }
+  .topbar-title { font-size: 13px; }
+  .user-badge { padding: 4px 8px; }
+  .user-ced { display: none; }
+  .btn-logout { font-size: 11px; padding: 6px 10px; }
+
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 7px; }
+  .stat-card { padding: 12px 10px; gap: 8px; }
+  .stat-val { font-size: 20px; }
+
+  .tab-btn { font-size: 10px; padding: 7px 4px; min-width: 55px; }
+
+  /* Modales: ancho completo en móvil */
+  .modal { width: 95vw !important; max-width: 95vw !important; padding: 20px 16px; margin: 10px; }
+  .modal-title { font-size: 15px; }
+
+  .card { padding: 16px 14px; }
+  .card-title { font-size: 17px; }
+
+  .form-row, .form-row-3 { grid-template-columns: 1fr; }
+
+  /* Toast en móvil: ancho completo */
+  #toast { left: 12px; right: 12px; bottom: 12px; max-width: 100%; }
+
+  .vac-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .vac-card { padding: 14px 10px; }
+  .vac-num { font-size: 26px; }
+
+  .filter-bar { flex-direction: column; align-items: stretch; }
+  .filter-select { width: 100%; }
+
+  .at-btns { flex-direction: column; }
+  .btn-approve, .btn-deny, .btn-process { width: 100%; }
+
+  .req-types { grid-template-columns: repeat(2, 1fr); }
+}

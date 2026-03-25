@@ -91,69 +91,69 @@
           <!-- Vacaciones -->
           <div id="fields-vacaciones" class="fg-group" style="display:none">
             <div class="form-row">
-              <div class="fg"><label>Fecha inicio</label><input type="date" id="vac-ini" onchange="calcDays('vacaciones')"/></div>
-              <div class="fg"><label>Fecha fin</label><input type="date" id="vac-fin" onchange="calcDays('vacaciones')"/></div>
+              <div class="fg"><label for="vac-ini">Fecha inicio</label><input type="date" id="vac-ini" onchange="calcDays('vacaciones')"/></div>
+              <div class="fg"><label for="vac-fin">Fecha fin</label><input type="date" id="vac-fin" onchange="calcDays('vacaciones')"/></div>
             </div>
             <div id="days-counter-vacaciones" class="days-counter" style="display:none">
               <div><div class="days-counter-label">📅 Días solicitados</div><div class="days-counter-sub" id="days-range-vacaciones"></div><div class="days-excluded" id="days-excl-vacaciones"></div></div>
               <div style="text-align:right"><div class="days-counter-val" id="days-val-vacaciones">0</div><div class="days-counter-sub">días</div></div>
             </div>
-            <div class="fg"><label>Modalidad</label><select id="vac-mod"><option>Día completo</option><option>Media mañana</option><option>Media tarde</option></select></div>
+            <div class="fg"><label for="vac-mod">Modalidad</label><select id="vac-mod"><option>Día completo</option><option>Media mañana</option><option>Media tarde</option></select></div>
           </div>
           <!-- Incapacidad -->
           <div id="fields-incapacidad" class="fg-group" style="display:none">
             <div class="form-row">
-              <div class="fg"><label>Fecha inicio</label><input type="date" id="inc-ini" onchange="calcDays('incapacidad')"/></div>
-              <div class="fg"><label>Fecha fin</label><input type="date" id="inc-fin" onchange="calcDays('incapacidad')"/></div>
+              <div class="fg"><label for="inc-ini">Fecha inicio</label><input type="date" id="inc-ini" onchange="calcDays('incapacidad')"/></div>
+              <div class="fg"><label for="inc-fin">Fecha fin</label><input type="date" id="inc-fin" onchange="calcDays('incapacidad')"/></div>
             </div>
             <div id="days-counter-incapacidad" class="days-counter" style="display:none">
               <div><div class="days-counter-label">📅 Días solicitados</div><div class="days-counter-sub" id="days-range-incapacidad"></div><div class="days-excluded" id="days-excl-incapacidad"></div></div>
               <div style="text-align:right"><div class="days-counter-val" id="days-val-incapacidad">0</div><div class="days-counter-sub">días</div></div>
             </div>
-            <div class="fg"><label>Tipo</label><select id="inc-tipo"><option>Enfermedad general</option><option>Accidente de trabajo</option><option>Maternidad / Paternidad</option><option>Cuido de familiar</option></select></div>
-            <div class="fg"><label>Médico / Centro de salud</label><input type="text" id="inc-med" placeholder="Ej: Dr. Pérez — CCSS Zapote"/></div>
-            <div class="fg"><label>Turno</label><select id="inc-turno"><option>Día completo</option><option>Media mañana</option><option>Media tarde</option></select></div>
+            <div class="fg"><label for="inc-tipo">Tipo</label><select id="inc-tipo"><option>Enfermedad general</option><option>Accidente de trabajo</option><option>Maternidad / Paternidad</option><option>Cuido de familiar</option></select></div>
+            <div class="fg"><label for="inc-med">Médico / Centro de salud</label><input type="text" id="inc-med" placeholder="Ej: Dr. Pérez — CCSS Zapote"/></div>
+            <div class="fg"><label for="inc-turno">Turno</label><select id="inc-turno"><option>Día completo</option><option>Media mañana</option><option>Media tarde</option></select></div>
           </div>
           <!-- Cumpleaños -->
           <div id="fields-cumpleanos" class="fg-group" style="display:none">
             <div class="form-row">
-              <div class="fg"><label>Fecha inicio</label><input type="date" id="cum-ini" onchange="calcDays('cumpleanos')"/></div>
-              <div class="fg"><label>Fecha fin</label><input type="date" id="cum-fin" onchange="calcDays('cumpleanos')"/></div>
+              <div class="fg"><label for="cum-ini">Fecha inicio</label><input type="date" id="cum-ini" onchange="calcDays('cumpleanos')"/></div>
+              <div class="fg"><label for="cum-fin">Fecha fin</label><input type="date" id="cum-fin" onchange="calcDays('cumpleanos')"/></div>
             </div>
             <div id="days-counter-cumpleanos" class="days-counter" style="display:none">
               <div><div class="days-counter-label">📅 Días solicitados</div><div class="days-counter-sub" id="days-range-cumpleanos"></div><div class="days-excluded" id="days-excl-cumpleanos"></div></div>
               <div style="text-align:right"><div class="days-counter-val" id="days-val-cumpleanos">0</div><div class="days-counter-sub">días</div></div>
             </div>
-            <div class="fg"><label>Turno</label><select id="cum-turno"><option>Día completo</option><option>Media mañana</option><option>Media tarde</option></select></div>
+            <div class="fg"><label for="cum-turno">Turno</label><select id="cum-turno"><option>Día completo</option><option>Media mañana</option><option>Media tarde</option></select></div>
           </div>
           <!-- Personal Day -->
           <div id="fields-personalday" class="fg-group" style="display:none">
             <div class="form-row">
-              <div class="fg"><label>Fecha inicio</label><input type="date" id="per-ini" onchange="calcDays('personalday')"/></div>
-              <div class="fg"><label>Fecha fin</label><input type="date" id="per-fin" onchange="calcDays('personalday')"/></div>
+              <div class="fg"><label for="per-ini">Fecha inicio</label><input type="date" id="per-ini" onchange="calcDays('personalday')"/></div>
+              <div class="fg"><label for="per-fin">Fecha fin</label><input type="date" id="per-fin" onchange="calcDays('personalday')"/></div>
             </div>
             <div id="days-counter-personalday" class="days-counter" style="display:none">
               <div><div class="days-counter-label">📅 Días solicitados</div><div class="days-counter-sub" id="days-range-personalday"></div><div class="days-excluded" id="days-excl-personalday"></div></div>
               <div style="text-align:right"><div class="days-counter-val" id="days-val-personalday">0</div><div class="days-counter-sub">días</div></div>
             </div>
-            <div class="fg"><label>Turno</label><select id="per-turno"><option>Día completo</option><option>Media mañana</option><option>Media tarde</option></select></div>
-            <div class="fg"><label>Motivo</label><select id="per-mot"><option>Personal Day</option><option>Día Extra por horas trabajadas</option><option>Día compensatorio</option><option>Otro</option></select></div>
+            <div class="fg"><label for="per-turno">Turno</label><select id="per-turno"><option>Día completo</option><option>Media mañana</option><option>Media tarde</option></select></div>
+            <div class="fg"><label for="per-mot">Motivo</label><select id="per-mot"><option>Personal Day</option><option>Día Extra por horas trabajadas</option><option>Día compensatorio</option><option>Otro</option></select></div>
           </div>
           <!-- Día Sin Goce -->
           <div id="fields-singoce" class="fg-group" style="display:none">
             <div class="warn-box">⚠️ <strong>Día sin goce de salario:</strong> No descuenta vacaciones pero sí afecta el salario del período.</div>
             <div class="form-row">
-              <div class="fg"><label>Fecha inicio</label><input type="date" id="sg-ini" onchange="calcDays('singoce')"/></div>
-              <div class="fg"><label>Fecha fin</label><input type="date" id="sg-fin" onchange="calcDays('singoce')"/></div>
+              <div class="fg"><label for="sg-ini">Fecha inicio</label><input type="date" id="sg-ini" onchange="calcDays('singoce')"/></div>
+              <div class="fg"><label for="sg-fin">Fecha fin</label><input type="date" id="sg-fin" onchange="calcDays('singoce')"/></div>
             </div>
             <div id="days-counter-singoce" class="days-counter" style="display:none">
               <div><div class="days-counter-label">📅 Días solicitados</div><div class="days-counter-sub" id="days-range-singoce"></div><div class="days-excluded" id="days-excl-singoce"></div></div>
               <div style="text-align:right"><div class="days-counter-val" id="days-val-singoce">0</div><div class="days-counter-sub">días</div></div>
             </div>
-            <div class="fg"><label>Turno</label><select id="sg-turno"><option>Día completo</option><option>Media mañana</option><option>Media tarde</option></select></div>
-            <div class="fg"><label>Motivo</label><textarea id="sg-mot" rows="2" placeholder="Indique el motivo..."></textarea></div>
+            <div class="fg"><label for="sg-turno">Turno</label><select id="sg-turno"><option>Día completo</option><option>Media mañana</option><option>Media tarde</option></select></div>
+            <div class="fg"><label for="sg-mot">Motivo</label><textarea id="sg-mot" rows="2" placeholder="Indique el motivo..."></textarea></div>
           </div>
-          <div class="fg" style="margin-top:4px"><label>Observaciones adicionales</label><textarea id="obs" rows="2" placeholder="Cualquier detalle adicional..."></textarea></div>
+          <div class="fg" style="margin-top:4px"><label for="obs">Observaciones adicionales</label><textarea id="obs" rows="2" placeholder="Cualquier detalle adicional..."></textarea></div>
           <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px">
             <button class="btn-sec" onclick="clearForm()">Cancelar</button>
             <button class="btn-submit" onclick="submitRequest()">📨 Enviar Solicitud</button>
@@ -394,7 +394,7 @@
           <button class="btn-submit" onclick="openNuevoColab()">➕ Nuevo ingreso</button>
         </div>
         <input type="text" id="colabSearch" placeholder="🔍 Buscar por nombre o cédula..."
-          oninput="renderColabList()"
+          oninput="debounceColabSearch()"
           style="width:100%;padding:10px 14px;border:1.5px solid var(--b200);border-radius:10px;font-size:13px;margin-bottom:14px;box-sizing:border-box;outline:none"/>
         <div id="colabList"></div>
       </div>
