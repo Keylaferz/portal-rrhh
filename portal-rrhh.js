@@ -160,9 +160,9 @@ const fmt = d => {
   return d;
 };
 const tid    = () => 'TKT-'+Date.now().toString(36).toUpperCase().slice(-5)+Math.random().toString(36).slice(2,5).toUpperCase();
-const tlabel     = t => ({vacaciones:'🏖️ Vacaciones',incapacidad:'🏥 Incapacidad',cumpleanos:'🎂 Cumpleaños',personalday:'⭐ Personal Day',singoce:'📤 Día Sin Goce'}[t]||t);
+const tlabel     = t => ({vacaciones:'Vacaciones',incapacidad:'Incapacidad',cumpleanos:'Cumpleaños',personalday:'Personal Day',singoce:'Día Sin Goce'}[t]||t);
 const tlabelText = t => ({vacaciones:'Vacaciones',incapacidad:'Incapacidad',cumpleanos:'Cumpleanos',personalday:'Personal Day',singoce:'Sin Goce'}[t]||t);
-const slabel = s => ({pending:'⏳ En Proceso',inprogress:'🔄 En Gestión',approved:'✅ Aprobada',denied:'❌ Denegada',cancelled:'🚫 Cancelada'}[s]||s);
+const slabel = s => ({pending:'En Proceso',inprogress:'En Gestión',approved:'Aprobada',denied:'Denegada',cancelled:'Cancelada'}[s]||s);
 const sbadge = s => `<span class="sb ${s||'pending'}">${slabel(s)}</span>`;
 // Guarda en caché local — clave por usuario para evitar colisiones en PC compartidas
 const save    = () => {
@@ -403,10 +403,10 @@ async function doLogin(){
   const raw=document.getElementById('cedulaInput').value.trim();
   const v=raw.replace(/[-.\s]/g,'');
   const err=document.getElementById('loginError');
-  if(!validateCedula(v)){err.style.display='block';err.textContent='⚠️ Ingrese una cédula válida (8–12 dígitos).';return;}
+  if(!validateCedula(v)){err.style.display='block';err.textContent='Ingrese una cédula válida (8–12 dígitos).';return;}
   const emp=EMPLOYEES.find(e=>e.cedula===v);
-  if(!emp){err.style.display='block';err.textContent='⚠️ Cédula no encontrada.';return;}
-  if(emp.acceso==='inactivo'){err.style.display='block';err.textContent='🚫 Su acceso al portal ha sido deshabilitado. Contacte a RRHH.';return;}
+  if(!emp){err.style.display='block';err.textContent='Cédula no encontrada. Verifique el número ingresado.';return;}
+  if(emp.acceso==='inactivo'){err.style.display='block';err.textContent='Su acceso al portal ha sido deshabilitado. Contacte a RRHH.';return;}
   err.style.display='none';
   currentUser=emp; isAdmin=false;
   sessionStorage.setItem('hr_session', JSON.stringify({cedula: emp.cedula}));
@@ -445,12 +445,12 @@ async function doAdminLogin(){
     if(!res){
       // GAS no respondió (timeout, red caída)
       err.style.display='block';
-      err.textContent='⚠️ No se pudo conectar al servidor. Verifique su conexión.';
+      err.textContent='No se pudo conectar al servidor. Verifique su conexión.';
       return;
     }
   }
   err.style.display='block';
-  err.textContent='⚠️ Credenciales incorrectas.';
+  err.textContent='Credenciales incorrectas.';
 }
 
 async function initAdmin(){
@@ -459,7 +459,7 @@ async function initAdmin(){
   // La sesión admin expira en 8 horas
   sessionStorage.setItem('hr_session', JSON.stringify({isAdmin: true, exp: Date.now() + 8*60*60*1000}));
   show('adminScreen');
-  document.getElementById('adminList').innerHTML='<div class="empty-state"><div class="empty-icon">⏳</div><div>Cargando datos...</div></div>';
+  document.getElementById('adminList').innerHTML='<div class="empty-state"><div class="empty-icon">...</div><div>Cargando datos...</div></div>';
   // Cargar empleados y tickets desde Sheets
   await loadEmployees();
   await loadAllTickets();
@@ -477,7 +477,7 @@ function refreshEmpSelect(){
 async function doLogout(){
   if(currentType) {
     const ok = await showConfirm(
-      '⏏ Cerrar sesión',
+      'Cerrar sesión',
       'Tiene una solicitud en progreso. Si sale ahora, <strong>perderá los datos ingresados</strong>.<br><br>¿Desea salir de todas formas?',
       'Salir', true
     );
@@ -520,7 +520,7 @@ function showTab(id,btn){
 
   function withLoad(renderFn) {
     if(cacheOk) { renderFn(); return; }
-    if(btn) { btn.textContent='⏳'; btn.disabled=true; }
+    if(btn) { btn.textContent='...'; btn.disabled=true; }
     loadUserData(currentUser.cedula).then(() => {
       renderFn(); updateStats();
       if(btn) { btn.disabled=false; btn.textContent=btn.dataset.orig||btn.textContent; }
@@ -531,6 +531,7 @@ function showTab(id,btn){
   if(id==='desglose')           { updateVacTab(); }
   if(id==='expediente')         { withLoad(renderExpView); }
   if(id==='historial_completo') { withLoad(renderFullHistory); }
+  if(id==='comprobantes')       { loadMisComprobantes(); }
 }
 
 function showAdminTab(id,btn){
@@ -583,19 +584,19 @@ function hasOverlap(cedula, ini, fin, excludeId=null) {
 }
 
 async function submitRequest(){
-  if(!currentType){toast('⚠️ Acción requerida','Seleccione un tipo de solicitud','warning');return;}
+  if(!currentType){toast('Acción requerida','Seleccione un tipo de solicitud','warning');return;}
   const obs=sanitizeText(getField('obs'));
   const bday=getEmpBirthday(currentUser);
   const f=typeFields[currentType];
   const ini=getField(f.ini),fin=getField(f.fin);
-  if(!ini||!fin){toast('⚠️ Fechas requeridas','Complete las fechas de inicio y fin','warning');return;}
-  if(fin<ini){toast('⚠️ Fecha inválida','La fecha fin no puede ser anterior al inicio','warning');return;}
+  if(!ini||!fin){toast('Fechas requeridas','Complete las fechas de inicio y fin','warning');return;}
+  if(fin<ini){toast('Fecha inválida','La fecha fin no puede ser anterior al inicio','warning');return;}
   const{days,excluded}=countWorkdays(ini,fin,bday);
-  if(days===0){toast('⚠️ Sin días hábiles','El rango seleccionado no contiene días hábiles','warning');return;}
+  if(days===0){toast('Sin días hábiles','El rango seleccionado no contiene días hábiles','warning');return;}
   // Verificar solapamiento con solicitudes existentes
   if(hasOverlap(currentUser.cedula, ini, fin)){
     const ok = await showConfirm(
-      '⚠️ Período solapado',
+      'Período solapado',
       'Ya tiene una solicitud <strong>pendiente, en gestión o aprobada</strong> que incluye fechas de este período.<br><br>¿Desea enviarla de todas formas?',
       'Enviar de todas formas', true
     );
@@ -613,7 +614,7 @@ async function submitRequest(){
     const vac=calcVac(currentUser);
     if(diasVac>vac.disp){
       const ok=await showConfirm(
-        '⚠️ Días insuficientes',
+        'Días insuficientes',
         `Tiene <strong>${vac.disp}</strong> día(s) disponibles y solicita <strong>${diasVac}</strong>.<br><br>Puede enviar la solicitud y RRHH la revisará.`,
         'Continuar de todas formas', true
       );
@@ -631,12 +632,12 @@ async function submitRequest(){
     const turno=getField('per-turno');
     const diasPD = (turno==='Media mañana'||turno==='Media tarde') ? 0.5 : days;
     if(pd.disp<=0){
-      toast('⚠️ Sin Personal Days',`No tiene Personal Days disponibles este año. Usados: ${pd.usados} / ${pd.total}`,'warning');
+      toast('Sin Personal Days',`No tiene Personal Days disponibles este año. Usados: ${pd.usados} / ${pd.total}`,'warning');
       return;
     }
     if(diasPD>pd.disp){
       const ok=await showConfirm(
-        '⚠️ Personal Days insuficientes',
+        'Personal Days insuficientes',
         `Tiene <strong>${pd.disp}</strong> Personal Day(s) disponible(s) y solicita <strong>${diasPD}</strong>.<br><br>¿Desea continuar de todas formas?`,
         'Continuar de todas formas', true
       );
@@ -666,7 +667,7 @@ function buildDet(t){
   if(d.turno)       s+=`\nTurno: ${d.turno}`;
   if(t.tipo==='incapacidad') s+=`\nTipo: ${d.tipo||''}\nMédico: ${d.medico||'No indicado'}`;
   if(t.tipo==='personalday') s+=`\nMotivo: ${d.motivo||''}`;
-  if(t.tipo==='singoce')     s+=`\nMotivo: ${d.motivo||''}\n⚠️ No descuenta vacaciones, sí descuenta salario.`;
+  if(t.tipo==='singoce')     s+=`\nMotivo: ${d.motivo||''}\nNota: No descuenta vacaciones, sí descuenta salario.`;
   return s;
 }
 
@@ -676,11 +677,11 @@ function showPreview(t){
     <hr>
     <span class="ef">Ticket:</span> ${t.id} &nbsp;|&nbsp; <span class="ef">Fecha:</span> ${fmt(t.fecha)}<br>
     <hr>
-    <span class="ef">👤</span> ${t.empleado} · ${t.cedula} · ${t.puesto}<br>
+    <span class="ef">Colaborador:</span> ${t.empleado} · ${t.cedula} · ${t.puesto}<br>
     <hr>
-    <span class="ef">📋 ${tlabel(t.tipo)}</span><br><br>
+    <span class="ef">${tlabel(t.tipo)}</span><br><br>
     ${buildDet(t).replace(/\n/g,'<br>')}<br><br>
-    <span class="ef">💬</span> ${t.obs||'Sin observaciones'}`;
+    <span class="ef">Observaciones:</span> ${t.obs||'Sin observaciones'}`;
   openModal('emailModal');
 }
 
@@ -1598,11 +1599,11 @@ async function confirmAcceso() {
     await loadEmployees();
     renderColabList();
     toast(
-      acceso==='activo' ? '✅ Acceso habilitado' : '🚫 Acceso deshabilitado',
+      acceso==='activo' ? 'Acceso habilitado' : 'Acceso deshabilitado',
       acceso==='activo' ? 'El colaborador puede ingresar al portal' : 'El colaborador no puede ingresar al portal'
     );
   } else {
-    toast('❌ Error', 'No se pudo actualizar el acceso');
+    toast('Error', 'No se pudo actualizar el acceso','error');
   }
 }
 
@@ -1629,9 +1630,9 @@ async function confirmDeleteColab() {
     await loadEmployees();
     renderColabList();
     refreshEmpSelect();
-    toast('🗑️ Colaborador eliminado', 'Removido del sistema');
+    toast('Colaborador eliminado', 'Removido del sistema','success');
   } else {
-    toast('❌ Error', 'No se pudo eliminar del Sheet');
+    toast('Error', 'No se pudo eliminar del Sheet','error');
   }
   colabToDelete = null;
 }
@@ -1681,14 +1682,360 @@ function _updateOfflineBanner() {
 
 window.addEventListener('online',  () => {
   _updateOfflineBanner();
-  toast('✅ Conexión restaurada', 'Sincronizando datos en tiempo real', 'success');
+  toast('Conexión restaurada', 'Sincronizando datos en tiempo real', 'success');
 });
 window.addEventListener('offline', () => {
   _updateOfflineBanner();
-  toast('⚠️ Sin conexión', 'Mostrando datos en caché local', 'warning');
+  toast('Sin conexión', 'Mostrando datos en caché local', 'warning');
 });
 
 document.addEventListener('DOMContentLoaded', () => {
   _updateOfflineBanner();
   restoreSession();
 });
+
+// ══════════════════════════════════════════════════════
+// COMPROBANTES DE PAGO
+// ══════════════════════════════════════════════════════
+
+// ── Estado local ──
+let comprobantesData   = [];   // filas parseadas del Excel
+let misComprobantes    = [];   // comprobantes del colaborador actual
+let currentComprobante = null; // para modal de detalle
+
+// ── Nombres de columnas esperadas (case-insensitive, sin tildes) ──
+const COMP_COL_MAP = {
+  cedula:     ['cedula','cédula','id','identificacion'],
+  nombre:     ['nombre','colaborador','empleado'],
+  email:      ['email','correo','emailcorp','e-mail'],
+  bruto:      ['salario bruto','bruto','salariobruto'],
+  ccss:       ['ccss','ccss empleado','deduccion ccss','deducciónccss'],
+  renta:      ['renta','deduccion renta','deducción renta'],
+  otras:      ['otras','otras deducciones','otrosdescuentos'],
+  neto:       ['salario neto','neto','salarioneto'],
+  obs:        ['observaciones','notas','obs'],
+};
+
+function _normHeader(h) {
+  return String(h).toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,' ').trim();
+}
+
+function _mapCompCol(headers) {
+  const map = {};
+  headers.forEach((h, i) => {
+    const norm = _normHeader(h);
+    for (const [key, aliases] of Object.entries(COMP_COL_MAP)) {
+      if (aliases.some(a => norm.includes(a))) map[key] = i;
+    }
+  });
+  return map;
+}
+
+// ── Drag & Drop ──
+function handleCompDrop(event) {
+  event.preventDefault();
+  document.getElementById('compUploadZone').classList.remove('drag-over');
+  const file = event.dataTransfer.files[0];
+  if (file) parseVoucherFile(file);
+}
+
+// ── Parseo de Excel / CSV ──
+function parseVoucherFile(file) {
+  if (!file) return;
+  if (!window.XLSX) {
+    toast('Librería no disponible', 'Recargue la página e intente de nuevo','error');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb  = XLSX.read(e.target.result, { type: 'binary' });
+      const ws  = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+      if (rows.length < 2) { toast('Archivo vacío','El archivo no contiene datos','warning'); return; }
+
+      const headers = rows[0];
+      const colMap  = _mapCompCol(headers);
+
+      comprobantesData = rows.slice(1)
+        .filter(r => r.some(c => c !== '' && c !== null && c !== undefined))
+        .map(r => ({
+          cedula: String(r[colMap.cedula] ?? '').replace(/[-.\s]/g,''),
+          nombre: String(r[colMap.nombre] ?? ''),
+          email:  String(r[colMap.email]  ?? ''),
+          bruto:  parseFloat(r[colMap.bruto])  || 0,
+          ccss:   parseFloat(r[colMap.ccss])   || 0,
+          renta:  parseFloat(r[colMap.renta])  || 0,
+          otras:  parseFloat(r[colMap.otras])  || 0,
+          neto:   parseFloat(r[colMap.neto])   || 0,
+          obs:    String(r[colMap.obs]  ?? ''),
+        }))
+        .filter(r => r.cedula || r.nombre);
+
+      if (comprobantesData.length === 0) {
+        toast('Sin datos válidos', 'Verifique que el archivo tenga las columnas correctas','warning');
+        return;
+      }
+      renderCompPreview();
+    } catch(err) {
+      toast('Error al leer archivo','Verifique que el formato sea .xlsx, .xls o .csv','error');
+    }
+  };
+  reader.readAsBinaryString(file);
+}
+
+function renderCompPreview() {
+  document.getElementById('compUploadZone').style.display = 'none';
+  document.getElementById('compPreviewSection').style.display = 'block';
+  document.getElementById('compRowCount').textContent = comprobantesData.length + ' colaboradores';
+
+  // Mes actual como valor por defecto
+  const hoy = new Date();
+  document.getElementById('compPeriodo').value = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
+
+  const thead = `<thead><tr>
+    <th>Cédula</th><th>Nombre</th><th>Email</th>
+    <th>Bruto (₡)</th><th>CCSS</th><th>Renta</th><th>Otras</th><th>Neto (₡)</th>
+  </tr></thead>`;
+  const tbody = '<tbody>' + comprobantesData.map(r => `<tr>
+    <td>${escHTML(r.cedula)}</td>
+    <td>${escHTML(r.nombre)}</td>
+    <td>${escHTML(r.email)}</td>
+    <td>${r.bruto.toLocaleString('es-CR')}</td>
+    <td>${r.ccss.toLocaleString('es-CR')}</td>
+    <td>${r.renta.toLocaleString('es-CR')}</td>
+    <td>${r.otras.toLocaleString('es-CR')}</td>
+    <td><strong>${r.neto.toLocaleString('es-CR')}</strong></td>
+  </tr>`).join('') + '</tbody>';
+
+  document.getElementById('compPreviewTable').innerHTML = thead + tbody;
+}
+
+function resetCompUpload() {
+  comprobantesData = [];
+  document.getElementById('compFileInput').value = '';
+  document.getElementById('compUploadZone').style.display = 'block';
+  document.getElementById('compPreviewSection').style.display = 'none';
+  document.getElementById('compPreviewTable').innerHTML = '';
+}
+
+// ── Enviar comprobantes ──
+async function sendVouchers() {
+  const periodo = document.getElementById('compPeriodo').value;
+  if (!periodo) { toast('Período requerido','Seleccione el período de pago antes de enviar','warning'); return; }
+  if (comprobantesData.length === 0) { toast('Sin datos','No hay comprobantes para enviar','warning'); return; }
+
+  const [yr, mo] = periodo.split('-');
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const periodoLabel = `${meses[parseInt(mo)-1]} ${yr}`;
+  const desc = document.getElementById('compDesc').value || `Planilla ordinaria ${periodoLabel}`;
+
+  showOverlay(`Enviando ${comprobantesData.length} comprobantes...`);
+
+  let ok = 0, err = 0;
+  for (const row of comprobantesData) {
+    try {
+      const res = await callGAS({
+        action:  'saveComprobante',
+        cedula:  row.cedula,
+        nombre:  row.nombre,
+        email:   row.email,
+        periodo,
+        periodoLabel,
+        descripcion:   desc,
+        salarioBruto:  row.bruto,
+        ccssEmpleado:  row.ccss,
+        renta:         row.renta,
+        otrasDeduc:    row.otras,
+        salarioNeto:   row.neto,
+        observaciones: row.obs,
+      });
+      if (res && res.ok) ok++; else err++;
+    } catch(_) { err++; }
+  }
+
+  hideOverlay();
+  resetCompUpload();
+  loadCompAdminHistory();
+
+  if (err === 0) {
+    toast('Comprobantes enviados', `${ok} correos enviados correctamente para ${periodoLabel}`, 'success');
+  } else {
+    toast('Envío parcial', `${ok} enviados, ${err} fallidos — revise los correos del sheet`, 'warning');
+  }
+}
+
+// ── Historial admin ──
+async function loadCompAdminHistory() {
+  const res = await gasGet({ action: 'getComprobantesAdmin' });
+  const list = document.getElementById('compAdminHistoryList');
+  if (!res || !res.ok || !res.data || res.data.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">—</div><div>No hay comprobantes enviados aún</div></div>';
+    return;
+  }
+  // Agrupa por periodo+fecha_envio
+  const grupos = {};
+  res.data.forEach(c => {
+    const k = `${c.periodo}|${c.fecha_envio}`;
+    if (!grupos[k]) grupos[k] = { periodo: c.periodo, fecha: c.fecha_envio, count: 0 };
+    grupos[k].count++;
+  });
+  list.innerHTML = Object.values(grupos)
+    .sort((a,b) => b.periodo.localeCompare(a.periodo))
+    .map(g => {
+      const [yr, mo] = (g.periodo || '').split('-');
+      const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+      const label = mo ? `${meses[parseInt(mo)-1]} ${yr}` : g.periodo;
+      return `<div class="comp-card">
+        <div class="comp-card-left">
+          <div class="comp-card-badge" style="font-size:9px">${(g.periodo||'').replace('-','/')}</div>
+          <div><div class="comp-card-period">${label}</div><div class="comp-card-meta">Enviado el ${g.fecha||'—'} · ${g.count} colaboradores</div></div>
+        </div>
+      </div>`;
+    }).join('');
+}
+
+// ── Comprobantes colaborador ──
+async function loadMisComprobantes() {
+  if (!currentUser) return;
+  const el = document.getElementById('misComprobantes');
+  el.innerHTML = '<div class="empty-state"><div class="empty-icon">...</div><div>Cargando...</div></div>';
+
+  const res = await gasGet({ action: 'getComprobantes', cedula: currentUser.cedula });
+  if (!res || !res.ok || !res.data) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">—</div><div>No se pudieron cargar los comprobantes</div></div>';
+    return;
+  }
+  misComprobantes = res.data;
+
+  // Poblar filtro de años
+  const years = [...new Set(misComprobantes.map(c => (c.periodo||'').split('-')[0]).filter(Boolean))].sort().reverse();
+  const yrSel = document.getElementById('comp-filt-year');
+  yrSel.innerHTML = '<option value="">Todos los años</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+
+  renderMisComprobantes();
+}
+
+function renderMisComprobantes() {
+  const el   = document.getElementById('misComprobantes');
+  const yr   = document.getElementById('comp-filt-year')?.value  || '';
+  const mo   = document.getElementById('comp-filt-month')?.value || '';
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+  const filtered = misComprobantes.filter(c => {
+    const [cy, cm] = (c.periodo || '').split('-');
+    if (yr && cy !== yr) return false;
+    if (mo && cm !== mo) return false;
+    return true;
+  }).sort((a,b) => (b.periodo||'').localeCompare(a.periodo||''));
+
+  if (filtered.length === 0) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">—</div><div>No hay comprobantes para el período seleccionado</div></div>';
+    return;
+  }
+
+  el.innerHTML = filtered.map((c, i) => {
+    const [cy, cm] = (c.periodo || '').split('-');
+    const label = cm ? `${meses[parseInt(cm)-1]} ${cy}` : c.periodo;
+    const neto  = parseFloat(c.salario_neto || c.salarioNeto || 0);
+    return `<div class="comp-card" style="cursor:pointer" onclick="openCompModal(${i})">
+      <div class="comp-card-left">
+        <div class="comp-card-badge">${(c.periodo||'').replace('-','/')}</div>
+        <div>
+          <div class="comp-card-period">${label}</div>
+          <div class="comp-card-meta">${escHTML(c.descripcion || 'Planilla ordinaria')}</div>
+        </div>
+      </div>
+      <div class="comp-card-right">
+        <div class="comp-card-amount">₡ ${neto.toLocaleString('es-CR')}</div>
+        <div class="comp-card-label">Salario neto</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Guardar referencia para el modal
+  window._filteredComprobantes = filtered;
+}
+
+function openCompModal(idx) {
+  const c = window._filteredComprobantes[idx];
+  if (!c) return;
+  currentComprobante = c;
+
+  const [cy, cm] = (c.periodo || '').split('-');
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const label = cm ? `${meses[parseInt(cm)-1]} ${cy}` : c.periodo;
+
+  document.getElementById('compModalTitle').textContent = `Comprobante — ${label}`;
+
+  const bruto  = parseFloat(c.salario_bruto  || c.salarioBruto  || 0);
+  const ccss   = parseFloat(c.ccss_empleado  || c.ccssEmpleado  || 0);
+  const renta  = parseFloat(c.renta          || 0);
+  const otras  = parseFloat(c.otras_deduc    || c.otrasDeduc    || 0);
+  const neto   = parseFloat(c.salario_neto   || c.salarioNeto   || 0);
+  const total_deduc = ccss + renta + otras;
+
+  document.getElementById('compModalBody').innerHTML = `
+    <p style="font-size:12px;color:var(--g400);margin-bottom:16px">${escHTML(c.descripcion||'Planilla ordinaria')} · ${escHTML(c.fecha_envio||'')}</p>
+    <div class="comp-detail-row"><span class="comp-detail-label">Salario Bruto</span><span class="comp-detail-val">₡ ${bruto.toLocaleString('es-CR')}</span></div>
+    <div class="comp-detail-row"><span class="comp-detail-label">Deducción CCSS (empleado)</span><span class="comp-detail-val" style="color:var(--orange)">- ₡ ${ccss.toLocaleString('es-CR')}</span></div>
+    <div class="comp-detail-row"><span class="comp-detail-label">Deducción Renta</span><span class="comp-detail-val" style="color:var(--orange)">- ₡ ${renta.toLocaleString('es-CR')}</span></div>
+    <div class="comp-detail-row"><span class="comp-detail-label">Otras Deducciones</span><span class="comp-detail-val" style="color:var(--orange)">- ₡ ${otras.toLocaleString('es-CR')}</span></div>
+    <div class="comp-detail-row"><span class="comp-detail-label">Total Deducciones</span><span class="comp-detail-val" style="color:var(--red)">- ₡ ${total_deduc.toLocaleString('es-CR')}</span></div>
+    <div class="comp-detail-row total-row" style="margin-top:8px;padding-top:12px;border-top:2px solid var(--b200)">
+      <span class="comp-detail-label">Salario Neto a Depositar</span>
+      <span class="comp-detail-val">₡ ${neto.toLocaleString('es-CR')}</span>
+    </div>
+    ${c.observaciones ? `<div style="margin-top:12px;font-size:12px;color:var(--g400)"><strong>Observaciones:</strong> ${escHTML(c.observaciones)}</div>` : ''}
+  `;
+  openModal('compModal');
+}
+
+function printComprobante() {
+  if (!currentComprobante) return;
+  const c = currentComprobante;
+  const [cy, cm] = (c.periodo || '').split('-');
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const label = cm ? `${meses[parseInt(cm)-1]} ${cy}` : c.periodo;
+
+  const bruto = parseFloat(c.salario_bruto  || c.salarioBruto  || 0);
+  const ccss  = parseFloat(c.ccss_empleado  || c.ccssEmpleado  || 0);
+  const renta = parseFloat(c.renta          || 0);
+  const otras = parseFloat(c.otras_deduc    || c.otrasDeduc    || 0);
+  const neto  = parseFloat(c.salario_neto   || c.salarioNeto   || 0);
+  const total_deduc = ccss + renta + otras;
+
+  const w = window.open('', '_blank', 'width=700,height=600');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+  <title>Comprobante ${label}</title>
+  <style>
+    body{font-family:Arial,sans-serif;padding:40px;color:#1E293B;max-width:600px;margin:auto}
+    h1{font-size:22px;color:#052960;margin-bottom:4px}
+    .sub{font-size:12px;color:#94A3B8;margin-bottom:24px}
+    table{width:100%;border-collapse:collapse}
+    td{padding:9px 12px;border-bottom:1px solid #E2E8F0;font-size:13px}
+    td:last-child{text-align:right;font-weight:600}
+    .total td{border-top:2px solid #1565C0;font-size:15px;font-weight:700;color:#052960}
+    .ded{color:#F97316}
+    footer{margin-top:32px;font-size:11px;color:#94A3B8;text-align:center}
+    @media print{body{padding:20px}}
+  </style></head><body>
+  <h1>Lean Consulting S.A.</h1>
+  <div class="sub">Comprobante de Pago — ${label}<br/>${escHTML(c.descripcion||'Planilla ordinaria')}</div>
+  <p style="font-size:13px;margin-bottom:16px"><strong>Colaborador:</strong> ${escHTML(currentUser?.nombre||c.nombre||'')} &nbsp;·&nbsp; <strong>Cédula:</strong> ${escHTML(currentUser?.cedula||c.cedula||'')}</p>
+  <table>
+    <tr><td>Salario Bruto</td><td>₡ ${bruto.toLocaleString('es-CR')}</td></tr>
+    <tr><td class="ded">Deducción CCSS (empleado)</td><td class="ded">- ₡ ${ccss.toLocaleString('es-CR')}</td></tr>
+    <tr><td class="ded">Deducción Renta</td><td class="ded">- ₡ ${renta.toLocaleString('es-CR')}</td></tr>
+    <tr><td class="ded">Otras Deducciones</td><td class="ded">- ₡ ${otras.toLocaleString('es-CR')}</td></tr>
+    <tr><td>Total Deducciones</td><td>- ₡ ${total_deduc.toLocaleString('es-CR')}</td></tr>
+    <tr class="total"><td>Salario Neto</td><td>₡ ${neto.toLocaleString('es-CR')}</td></tr>
+  </table>
+  ${c.observaciones ? `<p style="margin-top:16px;font-size:12px;color:#475569"><strong>Observaciones:</strong> ${escHTML(c.observaciones)}</p>` : ''}
+  <footer>Lean Consulting S.A. &nbsp;·&nbsp; Portal de Recursos Humanos &nbsp;·&nbsp; Generado el ${new Date().toLocaleDateString('es-CR')}</footer>
+  <script>window.onload=()=>window.print()<\/script>
+  </body></html>`);
+  w.document.close();
+}
