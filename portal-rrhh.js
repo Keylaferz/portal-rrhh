@@ -159,7 +159,6 @@ const fmt = d => {
   if(d instanceof Date) return d.toLocaleDateString('es-CR');
   return d;
 };
-const tid    = () => 'TKT-'+Date.now().toString(36).toUpperCase().slice(-5)+Math.random().toString(36).slice(2,5).toUpperCase();
 const tlabel     = t => ({vacaciones:'Vacaciones',incapacidad:'Incapacidad',cumpleanos:'Cumpleaños',personalday:'Personal Day',singoce:'Día Sin Goce'}[t]||t);
 const tlabelText = t => ({vacaciones:'Vacaciones',incapacidad:'Incapacidad',cumpleanos:'Cumpleanos',personalday:'Personal Day',singoce:'Sin Goce'}[t]||t);
 const slabel = s => ({pending:'En Proceso',inprogress:'En Gestión',approved:'Aprobada',denied:'Denegada',cancelled:'Cancelada'}[s]||s);
@@ -649,7 +648,7 @@ async function submitRequest(){
   }
 
   pendingTicket={
-    id:tid(),tipo:currentType,status:'pending',
+    tipo:currentType,status:'pending',
     fecha:new Date().toISOString().split('T')[0],
     cedula:currentUser.cedula,empleado:currentUser.nombre,puesto:currentUser.puesto,
     details,obs,editCount:0
@@ -689,14 +688,16 @@ async function confirmSend(){
   closeModal('emailModal');
   const t=pendingTicket;
   showOverlay('Guardando solicitud...');
-  // Guardar en Google Sheets
+  // Guardar en Google Sheets — el ID lo genera el servidor
   const res = await callGAS({
     action:'saveTicket',
-    id:t.id, cedula:t.cedula, empleado:t.empleado, puesto:t.puesto,
+    cedula:t.cedula, empleado:t.empleado, puesto:t.puesto,
     tipo:t.tipo, inicio:t.details.inicio, fin:t.details.fin,
     dias:t.details.dias, turno:t.details.turno||'',
     excluidos:t.details.excluidos||0, obs:t.obs||'', motivo:t.details.motivo||''
   });
+  // Usar el ID devuelto por el servidor
+  const ticketId = (res && res.ok && res.data && res.data.id) ? res.data.id : t.id;
   // Recargar tickets desde Sheets
   await loadUserData(currentUser.cedula);
   // Enviar correo
@@ -704,12 +705,12 @@ async function confirmSend(){
     action:'sendEmail',
     to: currentUser.emailcorp || currentUser.email || '',
     asunto:`[RRHH] Nueva solicitud - ${tlabelText(t.tipo)} - ${t.empleado}`,
-    ticket_id:t.id,empleado:t.empleado,cedula:t.cedula,puesto:t.puesto,
+    ticket_id:ticketId,empleado:t.empleado,cedula:t.cedula,puesto:t.puesto,
     tipo:tlabel(t.tipo),fecha:fmt(t.fecha),detalles:buildDet(t),
     observaciones:t.obs||'Ninguna',estado:'⏳ Pendiente de revisión',
     nota_admin:'Nueva solicitud recibida.',msg_extra:''
   });
-  toast('✅ Solicitud enviada',`Ticket ${t.id} · Guardada en Sheets`);
+  toast('✅ Solicitud enviada',`Ticket ${ticketId} · Guardada en Sheets`);
   clearForm(); updateStats(); renderTickets(); pendingTicket=null;
 }
 

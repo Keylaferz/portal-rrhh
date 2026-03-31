@@ -122,6 +122,21 @@ function updateRowField(sheetName, keyCol, keyVal, updates) {
 function ok(data)  { return JSON.stringify({ ok: true,  data: data  }); }
 function err(msg)  { return JSON.stringify({ ok: false, error: msg  }); }
 
+// ── Generador de códigos secuenciales ─────────────────────────────
+// Formato con período:  PREFIX-YYYYMM-NNNN   (ej: COMP-202601-0001)
+// Formato sin período:  PREFIX-NNNN           (ej: EMP-0001)
+function autoId(prefix, sheetName, periodo) {
+  var sh      = getSheet(sheetName);
+  var lastRow = Math.max(0, sh.getLastRow() - 1); // -1 por la fila de encabezados
+  var seq     = String(lastRow + 1).padStart(4, '0');
+  if (periodo) {
+    return prefix + '-' + periodo.replace('-', '') + '-' + seq;
+  }
+  var now    = new Date();
+  var yyyymm = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0');
+  return prefix + '-' + yyyymm + '-' + seq;
+}
+
 function jsonOut(payload) {
   return ContentService
     .createTextOutput(payload)
@@ -258,9 +273,12 @@ function getTickets(p) {
 function saveTicket(p) {
   const sh      = getSheet(SHEET.solicitudes);
   const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
-  const row     = headers.map(h => p[h] !== undefined ? p[h] : '');
+  // Generate sequential ID server-side (SOL-YYYYMM-NNNN)
+  const id = autoId('SOL', SHEET.solicitudes, '');
+  p.id = id;
+  const row = headers.map(h => p[h] !== undefined ? p[h] : '');
   sh.appendRow(row);
-  return ok(null);
+  return ok({ id: id });
 }
 
 function updateTicket(p) {
@@ -421,7 +439,7 @@ function saveComprobante(p) {
   const sh      = getSheet(SHEET.comprobantes);
   const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
 
-  const id         = 'COMP-' + Date.now().toString(36).toUpperCase().slice(-6);
+  const id         = autoId('COMP', SHEET.comprobantes, p.periodo || '');
   const fecha_envio = new Date().toLocaleDateString('es-CR');
 
   const dataObj = {
@@ -556,7 +574,7 @@ function sendComprobantePDF(p) {
   // Guardar registro en Comprobantes
   var sh      = getSheet(SHEET.comprobantes);
   var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
-  var id       = 'COMP-' + Date.now().toString(36).toUpperCase().slice(-6);
+  var id       = autoId('COMP', SHEET.comprobantes, periodo);
   var fechaEnv = new Date().toLocaleDateString('es-CR');
 
   var dataObj = {
