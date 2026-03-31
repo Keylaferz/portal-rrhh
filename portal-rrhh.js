@@ -4,7 +4,60 @@
    ══════════════════════════════════════════ */
 
 // ── CONFIG — pegue aquí su URL del GAS ──
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbyjKE7f4DXlVxBOmZHK6vGSYWQhONQgJkzuB-JslWP_89v-xhyuP74AjDYt8QiKC94w/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwkcJG9F1EKayc4HfxnAxbBenhiDH6k3h56avDIfqKtLWUxSmfNJGYaPTRQ-ZnV2QH8IA/exec';
+
+// ── CONFIG NOTIFICACIONES ──
+// Para cambiar los correos mostrados en el modal de resolución,
+// edite este valor (solo afecta el texto informativo visible al admin).
+const RRHH_EMAILS_LABEL = 'kfernandez, cfernandez';
+
+// ── CACHE CON TTL ──
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
+function saveCache(key, data) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() }));
+  } catch(e) { /* quota excedida — ignorar */ }
+}
+
+function getCache(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const item = JSON.parse(raw);
+    // Compatibilidad con formato antiguo (sin envelope TTL)
+    if (!item || typeof item !== 'object' || !('ts' in item) || !('data' in item)) return null;
+    if (Date.now() - item.ts > CACHE_TTL) { localStorage.removeItem(key); return null; }
+    return item.data;
+  } catch(e) { return null; }
+}
+
+function clearCache() {
+  // Elimina todas las claves del portal (incluye claves por usuario)
+  Object.keys(localStorage)
+    .filter(k => k.startsWith('hr_'))
+    .forEach(k => localStorage.removeItem(k));
+}
+
+// ── PROTECCIÓN XSS — escapa caracteres HTML en datos externos ──
+function escHTML(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
+// ── VALIDACIÓN DE INPUTS ──
+function validateCedula(v) {
+  const clean = String(v).replace(/[-.\s]/g,'');
+  return /^\d{8,12}$/.test(clean);
+}
+
+function sanitizeText(v) {
+  return String(v).replace(/<[^>]*>/g,'').trim();
+}
 
 // ── FERIADOS COSTA RICA ──
 function getCRHolidays(year) {
@@ -13,66 +66,89 @@ function getCRHolidays(year) {
     `${year}-07-25`,`${year}-08-02`,`${year}-08-15`,
     `${year}-09-15`,`${year}-10-12`,`${year}-12-25`,
   ];
-  const a=year%19,b=Math.floor(year/100),c=year%100;
-  const d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25);
-  const g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30;
-  const i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7;
-  const m=Math.floor((a+11*h+22*l)/451);
-  const month=Math.floor((h+l-7*m+114)/31);
-  const day=((h+l-7*m+114)%31)+1;
-  const easter=new Date(year,month-1,day);
-  const th=new Date(easter); th.setDate(easter.getDate()-3);
-  const fr=new Date(easter); fr.setDate(easter.getDate()-2);
-  fixed.push(th.toISOString().split('T')[0]);
-  fixed.push(fr.toISOString().split('T')[0]);
+  // Algoritmo de Gauss para calcular el Jueves y Viernes Santo
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day   = ((h + l - 7 * m + 114) % 31) + 1;
+  const easter = new Date(year, month - 1, day);
+  const thursday = new Date(easter); thursday.setDate(easter.getDate() - 3);
+  const friday   = new Date(easter); friday.setDate(easter.getDate() - 2);
+  fixed.push(thursday.toISOString().split('T')[0]);
+  fixed.push(friday.toISOString().split('T')[0]);
   return fixed;
 }
-function isHoliday(ds){ return getCRHolidays(parseInt(ds.split('-')[0])).includes(ds); }
-function isBirthday(ds,bday){
-  if(!bday) return false;
-  const p=bday.split('/'); if(p.length!==3) return false;
-  const [dd,mm]=p; const[,m,d]=ds.split('-'); return m===mm&&d===dd;
+
+function isHoliday(ds) {
+  return getCRHolidays(parseInt(ds.split('-')[0])).includes(ds);
 }
-function countWorkdays(ini,fin,bdayStr){
-  if(!ini||!fin||fin<ini) return {days:0,excluded:[]};
-  let days=0; const excluded=[];
-  const start=new Date(ini+'T12:00:00'), end=new Date(fin+'T12:00:00');
-  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
-    const ds=d.toISOString().split('T')[0], dow=d.getDay();
-    if(dow===0||dow===6){excluded.push({date:ds,reason:'Fin de semana'});continue;}
-    if(isHoliday(ds))   {excluded.push({date:ds,reason:'Feriado'});continue;}
-    if(isBirthday(ds,bdayStr)){excluded.push({date:ds,reason:'Cumpleaños'});continue;}
+
+function isBirthday(ds, bday) {
+  if (!bday) return false;
+  const parts = bday.split('/');
+  if (parts.length !== 3) return false;
+  const [dd, mm] = parts;
+  const [, m, d]  = ds.split('-');
+  return m === mm && d === dd;
+}
+
+function countWorkdays(ini, fin, bdayStr) {
+  if (!ini || !fin || fin < ini) return { days: 0, excluded: [] };
+  let days = 0;
+  const excluded = [];
+  const start = new Date(ini + 'T12:00:00');
+  const end   = new Date(fin + 'T12:00:00');
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const ds  = d.toISOString().split('T')[0];
+    const dow = d.getDay();
+    if (dow === 0 || dow === 6)    { excluded.push({ date: ds, reason: 'Fin de semana' }); continue; }
+    if (isHoliday(ds))             { excluded.push({ date: ds, reason: 'Feriado'       }); continue; }
+    if (isBirthday(ds, bdayStr))   { excluded.push({ date: ds, reason: 'Cumpleaños'    }); continue; }
     days++;
   }
-  return {days,excluded};
+  return { days, excluded };
 }
 
 // ── EMPLOYEES — cargado dinámicamente desde Google Sheets ──
 let EMPLOYEES = []; // se llena al iniciar el portal
 
+function _mapEmployees(data) {
+  return data.map(e => ({
+    cedula:    String(e.cedula),
+    nombre:    e.nombre,
+    puesto:    e.puesto    || '',
+    ingreso:   e.ingreso   || '',
+    consumidos:parseFloat(e.consumidos)||0,
+    email:     e.email     || '',
+    emailcorp: e.emailcorp || e.email || '',
+    pdTotal:   parseFloat(e.pdTotal)||3,
+    pdUsados:  parseFloat(e.pdUsados)||0,
+    pdAnio:    parseInt(e.pdAnio)||new Date().getFullYear(),
+    acceso:    e.acceso    || 'activo',
+  }));
+}
+
 async function loadEmployees() {
+  const cached = getCache('hr_employees');
+  if (cached && cached.length > 0) {
+    EMPLOYEES = cached;
+    // Actualizar desde GAS en segundo plano sin bloquear
+    gasGet({action:'getEmpleados'}).then(res => {
+      if (res && res.ok && res.data && res.data.length > 0) {
+        EMPLOYEES = _mapEmployees(res.data);
+        saveCache('hr_employees', EMPLOYEES);
+      }
+    });
+    return;
+  }
+  // Sin caché — esperar respuesta de GAS
   const res = await gasGet({action:'getEmpleados'});
   if (res && res.ok && res.data && res.data.length > 0) {
-    EMPLOYEES = res.data.map(e => ({
-      cedula:    String(e.cedula),
-      nombre:    e.nombre,
-      puesto:    e.puesto    || '',
-      ingreso:   e.ingreso   || '',
-      consumidos:parseFloat(e.consumidos)||0,
-      email:     e.email     || '',
-      emailcorp: e.emailcorp || e.email || '',
-      pdTotal:   parseFloat(e.pdTotal)||3,
-      pdUsados:  parseFloat(e.pdUsados)||0,
-      pdAnio:    parseInt(e.pdAnio)||new Date().getFullYear(),
-      acceso:    e.acceso    || 'activo',
-      emailcorp: e.emailcorp  || '',
-    }));
-    // Caché local
-    localStorage.setItem('hr_employees', JSON.stringify(EMPLOYEES));
-  } else {
-    // Fallback a caché local
-    const cached = localStorage.getItem('hr_employees');
-    if (cached) EMPLOYEES = JSON.parse(cached);
+    EMPLOYEES = _mapEmployees(res.data);
+    saveCache('hr_employees', EMPLOYEES);
   }
 }
 
@@ -89,29 +165,65 @@ let cancelData    = {};
 let selectedTickets = new Set();
 
 // ── HELPERS ──
+
+// Formatea fechas YYYY-MM-DD o Date a DD/MM/YYYY
 const fmt = d => {
-  if(!d) return '—';
-  if(typeof d==='string'&&d.match(/^\d{4}-\d{2}-\d{2}$/)){const[y,m,day]=d.split('-');return`${day}/${m}/${y}`;}
-  if(d instanceof Date) return d.toLocaleDateString('es-CR');
+  if (!d) return '—';
+  if (typeof d === 'string' && d.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    const [y, m, day] = d.split('-');
+    return `${day}/${m}/${y}`;
+  }
+  if (d instanceof Date) return d.toLocaleDateString('es-CR');
   return d;
 };
-const tid    = () => 'TKT-'+Date.now().toString().slice(-6);
-const tlabel     = t => ({vacaciones:'🏖️ Vacaciones',incapacidad:'🏥 Incapacidad',cumpleanos:'🎂 Cumpleaños',personalday:'⭐ Personal Day',singoce:'📤 Día Sin Goce'}[t]||t);
-const tlabelText = t => ({vacaciones:'Vacaciones',incapacidad:'Incapacidad',cumpleanos:'Cumpleanos',personalday:'Personal Day',singoce:'Sin Goce'}[t]||t);
-const slabel = s => ({pending:'⏳ En Proceso',inprogress:'🔄 En Gestión',approved:'✅ Aprobada',denied:'❌ Denegada',cancelled:'🚫 Cancelada'}[s]||s);
-const sbadge = s => `<span class="sb ${s||'pending'}">${slabel(s)}</span>`;
-// Guarda en Google Sheets vía GAS (localStorage solo como caché offline)
-const save    = () => localStorage.setItem('hr_tickets',JSON.stringify(tickets));
-const saveExp = () => localStorage.setItem('hr_expedientes',JSON.stringify(expedientes));
+
+// Etiquetas legibles para tipos, estados y badges
+const tlabel = t => ({
+  vacaciones:  'Vacaciones',
+  incapacidad: 'Incapacidad',
+  cumpleanos:  'Cumpleaños',
+  personalday: 'Personal Day',
+  singoce:     'Día Sin Goce',
+}[t] || t);
+
+const tlabelText = t => ({
+  vacaciones:  'Vacaciones',
+  incapacidad: 'Incapacidad',
+  cumpleanos:  'Cumpleanos',
+  personalday: 'Personal Day',
+  singoce:     'Sin Goce',
+}[t] || t);
+
+const slabel = s => ({
+  pending:    'En Proceso',
+  inprogress: 'En Gestión',
+  approved:   'Aprobada',
+  denied:     'Denegada',
+  cancelled:  'Cancelada',
+}[s] || s);
+
+const sbadge = s => `<span class="sb ${s || 'pending'}">${slabel(s)}</span>`;
+
+// Guarda tickets en caché local — clave por usuario para evitar colisiones en PC compartidas
+const save = () => {
+  const key = currentUser ? `hr_tickets_${currentUser.cedula}` : 'hr_tickets_all';
+  saveCache(key, tickets);
+};
+
+// Guarda expediente sin campos sensibles (IBAN, salario, datos médicos)
+const saveExp = () => {
+  if (!currentUser) return;
+  const exp = expedientes[currentUser.cedula];
+  if (!exp) return;
+  const safe = Object.assign({}, exp);
+  ['iban', 'salario', 'meds', 'alergias'].forEach(f => delete safe[f]);
+  saveCache(`hr_expedientes_${currentUser.cedula}`, safe);
+};
 
 // ── GAS API ──
+// gasGet: lectura silenciosa (sin overlay) — delega a callGAS
 async function gasGet(params) {
-  if(!GAS_URL||GAS_URL==='PEGUE_SU_URL_GAS_AQUI') return null;
-  try {
-    const url = `${GAS_URL}?${new URLSearchParams(params)}`;
-    const res  = await fetch(url);
-    return await res.json();
-  } catch(e) { return null; }
+  return callGAS(params, true);
 }
 const getField = (id,def='') => { const el=document.getElementById(id); return el?el.value:def; };
 const fmtMoney = v => v ? '₡ '+parseFloat(v).toLocaleString('es-CR') : '—';
@@ -121,7 +233,7 @@ function getEmpBirthday(emp){
 }
 
 function calcVac(emp){
-  const hoy=new Date(),ini=new Date(emp.ingreso);
+  const hoy=new Date(),ini=parseDate(emp.ingreso)||new Date();
   let m=(hoy.getFullYear()-ini.getFullYear())*12+(hoy.getMonth()-ini.getMonth());
   if(hoy.getDate()<ini.getDate()) m--;
   if(m<0) m=0;
@@ -136,6 +248,41 @@ function calcVac(emp){
   const disp=Math.round((acum-u)*10)/10;
   const prox=new Date(hoy.getFullYear(),hoy.getMonth()+1,ini.getDate());
   return{meses:m,acum,usados:u,disp,pct:Math.min(100,Math.round((u/Math.max(acum,1))*100)),prox};
+}
+
+// ── PARSER DE FECHAS — soporta YYYY-MM-DD y DD/MM/YYYY (formato del Sheet) ──
+function parseDate(dateStr) {
+  if (!dateStr) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return new Date(dateStr + 'T12:00:00');
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+    const [day, month, year] = dateStr.split('/');
+    return new Date(`${year}-${month}-${day}T12:00:00`);
+  }
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// ── FECHA LARGA EN ESPAÑOL ──
+function fmtLong(dateStr) {
+  if (!dateStr) return '—';
+  const d = parseDate(dateStr);
+  if (!d || isNaN(d.getTime())) return dateStr || '—';
+  const dias   = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const meses  = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  return `${dias[d.getDay()]} ${d.getDate()} de ${meses[d.getMonth()]} del ${d.getFullYear()}`;
+}
+
+// ── DÍA DE CUMPLEAÑOS ──
+// 1 día por año · Se descuenta al aprobar solicitud de tipo 'cumpleanos'
+function calcBirthday(emp) {
+  const anio = new Date().getFullYear();
+  const used = tickets
+    .filter(t => t.cedula === emp.cedula && t.tipo === 'cumpleanos' && t.status === 'approved')
+    // Usar la fecha del día tomado (details.inicio), no la fecha de envío de la solicitud
+    .filter(t => t.details && t.details.inicio && t.details.inicio.startsWith(String(anio)))
+    .reduce((s, t) => s + (parseFloat(t.details.dias) || 1), 0);
+  const disp = Math.max(0, 1 - used);
+  return { total: 1, used, disp };
 }
 
 // ── PERSONAL DAYS ──
@@ -161,23 +308,26 @@ function calcPD(emp){
 // ══════════════════════════════
 async function loadUserData(cedula) {
   showOverlay('Cargando sus datos...');
-  // Cargar tickets del colaborador
-  const resT = await gasGet({action:'getTickets', cedula});
+  // Parallelizar ambas llamadas al GAS para reducir el tiempo de carga
+  const [resT, resE] = await Promise.all([
+    gasGet({action:'getTickets', cedula}),
+    gasGet({action:'getExpediente', cedula}),
+  ]);
   if(resT && resT.ok && resT.data) {
     tickets = resT.data.map(parseTicket);
-    save(); // caché local
+    saveCache(`hr_tickets_${cedula}`, tickets);
   } else {
-    // Fallback a localStorage si no hay conexión
-    tickets = JSON.parse(localStorage.getItem('hr_tickets')||'[]')
-      .filter(t=>t.cedula===cedula);
+    tickets = (getCache(`hr_tickets_${cedula}`) || []).filter(t=>t.cedula===cedula);
   }
-  // Cargar expediente
-  const resE = await gasGet({action:'getExpediente', cedula});
+  // Cargar expediente — no se cachean campos sensibles (IBAN, salario, médico)
   if(resE && resE.ok && resE.data) {
     expedientes[cedula] = resE.data;
-    saveExp();
+    const safe = Object.assign({}, resE.data);
+    ['iban','salario','meds','alergias'].forEach(f => delete safe[f]);
+    saveCache(`hr_expedientes_${cedula}`, safe);
   } else {
-    expedientes = JSON.parse(localStorage.getItem('hr_expedientes')||'{}');
+    const cached = getCache(`hr_expedientes_${cedula}`);
+    if(cached) expedientes[cedula] = cached;
   }
   hideOverlay();
 }
@@ -187,42 +337,42 @@ async function loadAllTickets() {
   const resT = await gasGet({action:'getTickets'});
   if(resT && resT.ok && resT.data) {
     tickets = resT.data.map(parseTicket);
-    save();
+    saveCache('hr_tickets_all', tickets);
   } else {
-    tickets = JSON.parse(localStorage.getItem('hr_tickets')||'[]');
+    tickets = getCache('hr_tickets_all') || [];
   }
   hideOverlay();
 }
 
-// Convierte fila plana del Sheet a objeto con details anidado
+// Convierte fila plana del Sheet en un objeto con el sub-objeto details anidado
 function parseTicket(t) {
-  if(t.details) return t; // ya está parseado
+  if (t.details) return t; // ya fue parseado anteriormente
   return {
-    id:       t.id,
-    cedula:   t.cedula,
-    empleado: t.empleado,
-    puesto:   t.puesto,
-    tipo:     t.tipo,
-    status:   t.status,
-    fecha:    t.fecha,
-    obs:      t.obs,
-    notaAdmin:t.notaAdmin,
-    editCount:parseInt(t.editCount)||0,
-    resueltoFecha:    t.resueltoFecha,
-    fechaCancelacion: t.fechaCancelacion,
-    motivoCancelacion:t.motivoCancelacion,
-    motivoEdicion:    t.motivoEdicion,
-    ultimaEdicion:    t.ultimaEdicion,
+    id:                t.id,
+    cedula:            t.cedula,
+    empleado:          t.empleado,
+    puesto:            t.puesto,
+    tipo:              t.tipo,
+    status:            t.status,
+    fecha:             t.fecha,
+    obs:               t.obs,
+    notaAdmin:         t.notaAdmin,
+    editCount:         parseInt(t.editCount) || 0,
+    resueltoFecha:     t.resueltoFecha,
+    fechaCancelacion:  t.fechaCancelacion,
+    motivoCancelacion: t.motivoCancelacion,
+    motivoEdicion:     t.motivoEdicion,
+    ultimaEdicion:     t.ultimaEdicion,
     details: {
-      inicio:   t.inicio,
-      fin:      t.fin,
-      dias:     parseFloat(t.dias)||0,
-      turno:    t.turno,
-      excluidos:parseInt(t.excluidos)||0,
-      tipo:     t.tipo_inc||'',
-      medico:   t.medico||'',
-      motivo:   t.motivo||'',
-    }
+      inicio:    t.inicio,
+      fin:       t.fin,
+      dias:      parseFloat(t.dias) || 0,
+      turno:     t.turno,
+      excluidos: parseInt(t.excluidos) || 0,
+      tipo:      t.tipo_inc || '',
+      medico:    t.medico   || '',
+      motivo:    t.motivo   || '',
+    },
   };
 }
 
@@ -244,40 +394,49 @@ const typeFields={
   singoce:    {ini:'sg-ini', fin:'sg-fin'},
 };
 
-function calcDays(tipo){
-  const f=typeFields[tipo]; if(!f) return;
-  const ini=getField(f.ini),fin=getField(f.fin);
-  const ctr=document.getElementById('days-counter-'+tipo);
-  if(!ini||!fin||fin<ini){if(ctr)ctr.style.display='none';return;}
-  const bday=currentUser?getEmpBirthday(currentUser):'';
-  const{days,excluded}=countWorkdays(ini,fin,bday);
-  document.getElementById('days-val-'+tipo).textContent=days;
-  document.getElementById('days-range-'+tipo).textContent=`${fmt(ini)} → ${fmt(fin)}`;
-  const exclEl=document.getElementById('days-excl-'+tipo);
-  const fines=excluded.filter(e=>e.reason==='Fin de semana').length;
-  const feries=excluded.filter(e=>e.reason==='Feriado').length;
-  const cumple=excluded.filter(e=>e.reason==='Cumpleaños').length;
-  const parts=[]; if(fines)parts.push(`${fines} fin(es) de semana`);
-  if(feries)parts.push(`${feries} feriado(s)`); if(cumple)parts.push(`${cumple} cumpleaños`);
-  exclEl.textContent=parts.length?`Excluidos: ${parts.join(', ')}` :'';
-  if(ctr)ctr.style.display='flex';
+// ── Helper compartido para renderizar el contador de días en cualquier formulario ──
+function _renderDaysCounter(ini, fin, ids) {
+  const ctr = document.getElementById(ids.counter);
+  if (!ini || !fin || fin < ini) {
+    if (ctr) ctr.style.display = 'none';
+    return;
+  }
+  const bday = currentUser ? getEmpBirthday(currentUser) : '';
+  const { days, excluded } = countWorkdays(ini, fin, bday);
+
+  document.getElementById(ids.val).textContent   = days;
+  document.getElementById(ids.range).textContent = `${fmt(ini)} → ${fmt(fin)}`;
+
+  const fines  = excluded.filter(e => e.reason === 'Fin de semana').length;
+  const feries = excluded.filter(e => e.reason === 'Feriado').length;
+  const cumple = excluded.filter(e => e.reason === 'Cumpleaños').length;
+  const parts  = [];
+  if (fines)  parts.push(`${fines} fin(es) de semana`);
+  if (feries) parts.push(`${feries} feriado(s)`);
+  if (cumple) parts.push(`${cumple} cumpleaños`);
+
+  document.getElementById(ids.excl).textContent = parts.length ? `Excluidos: ${parts.join(', ')}` : '';
+  if (ctr) ctr.style.display = 'flex';
 }
 
-function calcEditDays(){
-  const ini=getField('edit-ini'),fin=getField('edit-fin');
-  const ctr=document.getElementById('edit-days-counter');
-  if(!ini||!fin||fin<ini){ctr.style.display='none';return;}
-  const bday=currentUser?getEmpBirthday(currentUser):'';
-  const{days,excluded}=countWorkdays(ini,fin,bday);
-  document.getElementById('edit-days-val').textContent=days;
-  document.getElementById('edit-days-range').textContent=`${fmt(ini)} → ${fmt(fin)}`;
-  const fines=excluded.filter(e=>e.reason==='Fin de semana').length;
-  const feries=excluded.filter(e=>e.reason==='Feriado').length;
-  const cumple=excluded.filter(e=>e.reason==='Cumpleaños').length;
-  const parts=[]; if(fines)parts.push(`${fines} fin(es) de semana`);
-  if(feries)parts.push(`${feries} feriado(s)`); if(cumple)parts.push(`${cumple} cumpleaños`);
-  document.getElementById('edit-days-excl').textContent=parts.length?`Excluidos: ${parts.join(', ')}`:'';
-  ctr.style.display='flex';
+function calcDays(tipo) {
+  const f = typeFields[tipo];
+  if (!f) return;
+  _renderDaysCounter(getField(f.ini), getField(f.fin), {
+    counter: `days-counter-${tipo}`,
+    val:     `days-val-${tipo}`,
+    range:   `days-range-${tipo}`,
+    excl:    `days-excl-${tipo}`,
+  });
+}
+
+function calcEditDays() {
+  _renderDaysCounter(getField('edit-ini'), getField('edit-fin'), {
+    counter: 'edit-days-counter',
+    val:     'edit-days-val',
+    range:   'edit-days-range',
+    excl:    'edit-days-excl',
+  });
 }
 
 // ══════════════════════════════
@@ -292,22 +451,37 @@ function switchLoginTab(t,btn){
 }
 
 async function doLogin(){
-  // Asegurar que los empleados estén cargados
   if(EMPLOYEES.length===0) await loadEmployees();
-  const v=document.getElementById('cedulaInput').value.trim().replace(/[-.\s]/g,'');
-  const emp=EMPLOYEES.find(e=>e.cedula===v);
+  const raw=document.getElementById('cedulaInput').value.trim();
+  const v=raw.replace(/[-.\s]/g,'');
   const err=document.getElementById('loginError');
-  if(!emp){err.style.display='block';err.textContent='⚠️ Cédula no encontrada.';return;}
-  if(emp.acceso==='inactivo'){err.style.display='block';err.textContent='🚫 Su acceso al portal ha sido deshabilitado. Contacte a RRHH.';return;}
+  if(!validateCedula(v)){err.style.display='block';err.textContent='Ingrese una cédula válida (8–12 dígitos).';return;}
+  const emp=EMPLOYEES.find(e=>e.cedula===v);
+  if(!emp){err.style.display='block';err.textContent='Cédula no encontrada. Verifique el número ingresado.';return;}
+  if(emp.acceso==='inactivo'){err.style.display='block';err.textContent='Su acceso al portal ha sido deshabilitado. Contacte a RRHH.';return;}
   err.style.display='none';
   currentUser=emp; isAdmin=false;
+  sessionStorage.setItem('hr_session', JSON.stringify({cedula: emp.cedula}));
   show('appScreen');
   document.getElementById('userName').textContent  =emp.nombre.split(' ').slice(0,2).join(' ');
   document.getElementById('userCedula').textContent='Cédula: '+emp.cedula;
   document.getElementById('userAvatar').textContent=emp.nombre[0];
-  // Cargar datos desde Sheets
-  await loadUserData(emp.cedula);
-  updateStats(); renderTickets(); updateVacTab(); renderExpView();
+  // Si hay caché del usuario, mostrar pantalla de inmediato
+  const cachedTickets = getCache(`hr_tickets_${emp.cedula}`);
+  if (cachedTickets) {
+    tickets = cachedTickets;
+    const cachedExp = getCache(`hr_expedientes_${emp.cedula}`);
+    if (cachedExp) expedientes[emp.cedula] = cachedExp;
+    updateStats(); renderTickets(); updateVacTab(); renderExpView();
+    // Actualizar desde GAS en segundo plano sin bloquear la UI
+    loadUserData(emp.cedula).then(() => {
+      updateStats(); renderTickets(); updateVacTab(); renderExpView();
+    });
+  } else {
+    // Primera vez o caché expirado — esperar GAS
+    await loadUserData(emp.cedula);
+    updateStats(); renderTickets(); updateVacTab(); renderExpView();
+  }
 }
 
 async function doAdminLogin(){
@@ -316,33 +490,30 @@ async function doAdminLogin(){
   const err = document.getElementById('loginError');
   err.style.display = 'none';
 
-  // Primero intenta validar contra GAS
+  // Validar contra GAS — única fuente de verdad
   if(GAS_URL){
-    try {
-      const res = await callGAS({action:'authAdmin', user:u, pass:p}, true);
-      if(res && res.ok){ initAdmin(); return; }
-      // Si GAS responde pero credenciales incorrectas
+    const res = await callGAS({action:'authAdmin', user:u, pass:p}, true);
+    if(res && res.ok){ initAdmin(); return; }
+    if(!res){
+      // GAS no respondió (timeout, red caída)
       err.style.display='block';
-      err.textContent='⚠️ Credenciales incorrectas.';
+      err.textContent='No se pudo conectar al servidor. Verifique su conexión.';
       return;
-    } catch(e){
-      // GAS falló — usar fallback local
     }
   }
-  // Fallback local
-  if(u==='admin' && p==='rrhh2024'){ initAdmin(); return; }
   err.style.display='block';
-  err.textContent='⚠️ Credenciales incorrectas.';
+  err.textContent='Credenciales incorrectas.';
 }
 
 async function initAdmin(){
   document.getElementById('loginError').style.display='none';
   isAdmin=true;
+  // La sesión admin expira en 8 horas
+  sessionStorage.setItem('hr_session', JSON.stringify({isAdmin: true, exp: Date.now() + 8*60*60*1000}));
   show('adminScreen');
-  document.getElementById('adminList').innerHTML='<div class="empty-state"><div class="empty-icon">⏳</div><div>Cargando datos...</div></div>';
-  // Cargar empleados y tickets desde Sheets
-  await loadEmployees();
-  await loadAllTickets();
+  document.getElementById('adminList').innerHTML='<div class="empty-state"><div class="empty-icon">...</div><div>Cargando datos...</div></div>';
+  // Parallelizar carga de empleados y tickets para reducir el tiempo de inicio
+  await Promise.all([loadEmployees(), loadAllTickets()]);
   populateEmpFilter(); renderAdmin();
   refreshEmpSelect();
 }
@@ -354,8 +525,18 @@ function refreshEmpSelect(){
       .map(e=>`<option value="${e.cedula}">${e.nombre}</option>`).join('');
 }
 
-function doLogout(){
+async function doLogout(){
+  if(currentType) {
+    const ok = await showConfirm(
+      'Cerrar sesión',
+      'Tiene una solicitud en progreso. Si sale ahora, <strong>perderá los datos ingresados</strong>.<br><br>¿Desea salir de todas formas?',
+      'Salir', true
+    );
+    if(!ok) return;
+  }
   currentUser=null; isAdmin=false; currentType=null;
+  sessionStorage.removeItem('hr_session');
+  clearCache();
   show('loginScreen');
   document.getElementById('cedulaInput').value='';
   document.getElementById('adminUser').value='';
@@ -374,14 +555,34 @@ function show(id){
 // TABS
 // ══════════════════════════════
 function showTab(id,btn){
+  // Advertir si hay un formulario activo que se perdería
+  if(currentType && id !== 'nueva') {
+    if(!confirm('Tiene una solicitud en progreso. ¿Desea cambiar de pestaña y perder los datos ingresados?')) return;
+    clearForm();
+  }
   document.querySelectorAll('#appScreen .tab-panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('#appScreen .tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
+  if(btn && !btn.dataset.orig) btn.dataset.orig = btn.textContent;
   if(btn) btn.classList.add('active');
-  if(id==='historial') { loadUserData(currentUser.cedula).then(()=>{renderTickets();}); }
-  if(id==='desglose')  { updateVacTab(); }
-  if(id==='expediente'){ loadUserData(currentUser.cedula).then(()=>{renderExpView();}); }
-  if(id==='historial_completo'){ loadUserData(currentUser.cedula).then(()=>{renderFullHistory();}); }
+
+  // Solo recarga desde GAS si el caché del usuario expiró
+  const cacheOk = currentUser && getCache(`hr_tickets_${currentUser.cedula}`) !== null;
+
+  function withLoad(renderFn) {
+    if(cacheOk) { renderFn(); return; }
+    if(btn) { btn.textContent='...'; btn.disabled=true; }
+    loadUserData(currentUser.cedula).then(() => {
+      renderFn(); updateStats();
+      if(btn) { btn.disabled=false; btn.textContent=btn.dataset.orig||btn.textContent; }
+    });
+  }
+
+  if(id==='historial')          { withLoad(renderTickets); }
+  if(id==='desglose')           { updateVacTab(); }
+  if(id==='expediente')         { withLoad(renderExpView); }
+  if(id==='historial_completo') { withLoad(renderFullHistory); }
+  if(id==='comprobantes')       { loadMisComprobantes(); }
 }
 
 function showAdminTab(id,btn){
@@ -402,6 +603,15 @@ function selType(t){
   document.querySelectorAll('[id^="days-counter-"]').forEach(d=>d.style.display='none');
   document.getElementById('fields-'+t).style.display='block';
   document.getElementById('formFields').style.display='block';
+  // Establecer fecha mínima = hoy en todos los inputs de fecha del tipo seleccionado
+  const today = new Date().toISOString().split('T')[0];
+  const f = typeFields[t];
+  if(f) {
+    const iniEl = document.getElementById(f.ini);
+    const finEl = document.getElementById(f.fin);
+    if(iniEl) iniEl.min = today;
+    if(finEl) finEl.min = today;
+  }
 }
 
 function clearForm(){
@@ -413,19 +623,38 @@ function clearForm(){
   document.getElementById('obs').value='';
 }
 
-function submitRequest(){
-  if(!currentType){alert('Seleccione un tipo de solicitud');return;}
-  const obs=getField('obs');
+// Detecta solapamiento con solicitudes existentes (pendiente, en gestión o aprobada)
+function hasOverlap(cedula, ini, fin, excludeId=null) {
+  return tickets.some(t =>
+    t.cedula === cedula &&
+    (excludeId ? t.id !== excludeId : true) &&
+    ['pending','inprogress','approved'].includes(t.status) &&
+    t.details && t.details.inicio && t.details.fin &&
+    t.details.inicio <= fin && t.details.fin >= ini
+  );
+}
+
+async function submitRequest(){
+  if(!currentType){toast('Acción requerida','Seleccione un tipo de solicitud','warning');return;}
+  const obs=sanitizeText(getField('obs'));
   const bday=getEmpBirthday(currentUser);
   const f=typeFields[currentType];
   const ini=getField(f.ini),fin=getField(f.fin);
-  if(!ini||!fin){alert('Complete las fechas de inicio y fin');return;}
-  if(fin<ini){alert('La fecha fin no puede ser anterior al inicio');return;}
+  if(!ini||!fin){toast('Fechas requeridas','Complete las fechas de inicio y fin','warning');return;}
+  if(fin<ini){toast('Fecha inválida','La fecha fin no puede ser anterior al inicio','warning');return;}
   const{days,excluded}=countWorkdays(ini,fin,bday);
-  if(days===0){alert('El rango no contiene días hábiles.');return;}
+  if(days===0){toast('Sin días hábiles','El rango seleccionado no contiene días hábiles','warning');return;}
+  // Verificar solapamiento con solicitudes existentes
+  if(hasOverlap(currentUser.cedula, ini, fin)){
+    const ok = await showConfirm(
+      'Período solapado',
+      'Ya tiene una solicitud <strong>pendiente, en gestión o aprobada</strong> que incluye fechas de este período.<br><br>¿Desea enviarla de todas formas?',
+      'Enviar de todas formas', true
+    );
+    if(!ok) return;
+  }
 
   let details={};
-  // Ajuste medio día: si el turno es media mañana o media tarde, vale 0.5
   function ajustarDias(d, turno) {
     return (turno==='Media mañana'||turno==='Media tarde') ? 0.5 : d;
   }
@@ -435,36 +664,43 @@ function submitRequest(){
     const diasVac  = ajustarDias(days, turnoVac);
     const vac=calcVac(currentUser);
     if(diasVac>vac.disp){
-      const ok=confirm(`⚠️ Atención: tiene ${vac.disp} día(s) disponibles aprobados y solicita ${diasVac}.\n\nPuede enviar la solicitud y RRHH la revisará.\n\n¿Desea continuar?`);
+      const ok=await showConfirm(
+        'Días insuficientes',
+        `Tiene <strong>${vac.disp}</strong> día(s) disponibles y solicita <strong>${diasVac}</strong>.<br><br>Puede enviar la solicitud y RRHH la revisará.`,
+        'Continuar de todas formas', true
+      );
       if(!ok) return;
     }
     details={inicio:ini,fin,dias:diasVac,turno:turnoVac,excluidos:excluded.length};
   } else if(currentType==='incapacidad'){
     const turnoInc = getField('inc-turno');
-    details={inicio:ini,fin,dias:ajustarDias(days,turnoInc),tipo:getField('inc-tipo'),medico:getField('inc-med'),turno:turnoInc,excluidos:excluded.length};
+    details={inicio:ini,fin,dias:ajustarDias(days,turnoInc),tipo:getField('inc-tipo'),medico:sanitizeText(getField('inc-med')),turno:turnoInc,excluidos:excluded.length};
   } else if(currentType==='cumpleanos'){
     const turnoCum = getField('cum-turno');
     details={inicio:ini,fin,dias:ajustarDias(days,turnoCum),turno:turnoCum,excluidos:excluded.length};
   } else if(currentType==='personalday'){
     const pd=calcPD(currentUser);
     const turno=getField('per-turno');
-    // Media mañana o media tarde = 0.5 días, día completo = días hábiles normales
     const diasPD = (turno==='Media mañana'||turno==='Media tarde') ? 0.5 : days;
     if(pd.disp<=0){
-      alert(`⚠️ Ya no tiene Personal Days disponibles este año.\nUsados: ${pd.usados} / ${pd.total}`);
+      toast('Sin Personal Days',`No tiene Personal Days disponibles este año. Usados: ${pd.usados} / ${pd.total}`,'warning');
       return;
     }
     if(diasPD>pd.disp){
-      const ok=confirm(`⚠️ Tiene ${pd.disp} Personal Day(s) disponible(s) y solicita ${diasPD}.\n\n¿Desea continuar de todas formas?`);
+      const ok=await showConfirm(
+        'Personal Days insuficientes',
+        `Tiene <strong>${pd.disp}</strong> Personal Day(s) disponible(s) y solicita <strong>${diasPD}</strong>.<br><br>¿Desea continuar de todas formas?`,
+        'Continuar de todas formas', true
+      );
       if(!ok) return;
     }
     details={inicio:ini,fin,dias:diasPD,turno,motivo:getField('per-mot'),excluidos:excluded.length};
   } else if(currentType==='singoce'){
-    details={inicio:ini,fin,dias:days,turno:getField('sg-turno'),motivo:getField('sg-mot'),excluidos:excluded.length};
+    details={inicio:ini,fin,dias:days,turno:getField('sg-turno'),motivo:sanitizeText(getField('sg-mot')),excluidos:excluded.length};
   }
 
   pendingTicket={
-    id:tid(),tipo:currentType,status:'pending',
+    tipo:currentType,status:'pending',
     fecha:new Date().toISOString().split('T')[0],
     cedula:currentUser.cedula,empleado:currentUser.nombre,puesto:currentUser.puesto,
     details,obs,editCount:0
@@ -482,7 +718,7 @@ function buildDet(t){
   if(d.turno)       s+=`\nTurno: ${d.turno}`;
   if(t.tipo==='incapacidad') s+=`\nTipo: ${d.tipo||''}\nMédico: ${d.medico||'No indicado'}`;
   if(t.tipo==='personalday') s+=`\nMotivo: ${d.motivo||''}`;
-  if(t.tipo==='singoce')     s+=`\nMotivo: ${d.motivo||''}\n⚠️ No descuenta vacaciones, sí descuenta salario.`;
+  if(t.tipo==='singoce')     s+=`\nMotivo: ${d.motivo||''}\nNota: No descuenta vacaciones, sí descuenta salario.`;
   return s;
 }
 
@@ -490,13 +726,13 @@ function showPreview(t){
   document.getElementById('emailPreview').innerHTML=`
     <span class="ef">Asunto:</span> [RRHH] Nueva solicitud — ${tlabel(t.tipo)} — ${t.empleado}<br>
     <hr>
-    <span class="ef">Ticket:</span> ${t.id} &nbsp;|&nbsp; <span class="ef">Fecha:</span> ${fmt(t.fecha)}<br>
+    <span class="ef">Fecha:</span> ${fmt(t.fecha)}<br>
     <hr>
-    <span class="ef">👤</span> ${t.empleado} · ${t.cedula} · ${t.puesto}<br>
+    <span class="ef">Colaborador:</span> ${t.empleado} · ${t.cedula} · ${t.puesto}<br>
     <hr>
-    <span class="ef">📋 ${tlabel(t.tipo)}</span><br><br>
+    <span class="ef">${tlabel(t.tipo)}</span><br><br>
     ${buildDet(t).replace(/\n/g,'<br>')}<br><br>
-    <span class="ef">💬</span> ${t.obs||'Sin observaciones'}`;
+    <span class="ef">Observaciones:</span> ${t.obs||'Sin observaciones'}`;
   openModal('emailModal');
 }
 
@@ -504,14 +740,18 @@ async function confirmSend(){
   closeModal('emailModal');
   const t=pendingTicket;
   showOverlay('Guardando solicitud...');
-  // Guardar en Google Sheets
+  // Guardar en Google Sheets — el ID lo genera el servidor
   const res = await callGAS({
     action:'saveTicket',
-    id:t.id, cedula:t.cedula, empleado:t.empleado, puesto:t.puesto,
-    tipo:t.tipo, inicio:t.details.inicio, fin:t.details.fin,
+    cedula:t.cedula, empleado:t.empleado, puesto:t.puesto,
+    tipo:t.tipo, status:'pending', fecha:t.fecha,
+    inicio:t.details.inicio, fin:t.details.fin,
     dias:t.details.dias, turno:t.details.turno||'',
-    excluidos:t.details.excluidos||0, obs:t.obs||'', motivo:t.details.motivo||''
+    excluidos:t.details.excluidos||0, obs:t.obs||'', motivo:t.details.motivo||'',
+    tipo_inc:t.details.tipo||'', medico:t.details.medico||'',
   });
+  // Usar el ID devuelto por el servidor
+  const ticketId = (res && res.ok && res.data && res.data.id) ? res.data.id : '—';
   // Recargar tickets desde Sheets
   await loadUserData(currentUser.cedula);
   // Enviar correo
@@ -519,27 +759,65 @@ async function confirmSend(){
     action:'sendEmail',
     to: currentUser.emailcorp || currentUser.email || '',
     asunto:`[RRHH] Nueva solicitud - ${tlabelText(t.tipo)} - ${t.empleado}`,
-    ticket_id:t.id,empleado:t.empleado,cedula:t.cedula,puesto:t.puesto,
+    ticket_id:ticketId,empleado:t.empleado,cedula:t.cedula,puesto:t.puesto,
     tipo:tlabel(t.tipo),fecha:fmt(t.fecha),detalles:buildDet(t),
     observaciones:t.obs||'Ninguna',estado:'⏳ Pendiente de revisión',
     nota_admin:'Nueva solicitud recibida.',msg_extra:''
   });
-  toast('✅ Solicitud enviada',`Ticket ${t.id} · Guardada en Sheets`);
+  toast('✅ Solicitud enviada',`Ticket ${ticketId} · Guardada en Sheets`);
   clearForm(); updateStats(); renderTickets(); pendingTicket=null;
 }
 
 async function callGAS(params, silent=false){
   if(!GAS_URL||GAS_URL==='PEGUE_SU_URL_GAS_AQUI') return null;
   if(!silent) document.getElementById('sendingOverlay').classList.add('active');
+  const hide = () => { if(!silent) document.getElementById('sendingOverlay').classList.remove('active'); };
   try{
+    const controller = new AbortController();
+    const timeoutId  = setTimeout(() => controller.abort(), 25000); // 25s — GAS puede tardar en arrancar en frío
     const url=`${GAS_URL}?${new URLSearchParams(params)}`;
-    const res=await fetch(url);
-    const data=await res.json();
-    if(!silent) document.getElementById('sendingOverlay').classList.remove('active');
+    const res=await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    // Verificar código HTTP antes de parsear
+    if(!res.ok){
+      hide();
+      if(!silent) toast('⚠️ Error del servidor',`El servidor respondió con error ${res.status}. Intente de nuevo.`,'warning');
+      return null;
+    }
+    let data;
+    try { data = await res.json(); }
+    catch(je){
+      hide();
+      if(!silent) toast('⚠️ Respuesta inválida','El servidor devolvió una respuesta inesperada.','warning');
+      return null;
+    }
+    hide();
     return data;
   }catch(e){
-    if(!silent) document.getElementById('sendingOverlay').classList.remove('active');
+    hide();
+    if(e.name==='AbortError') toast('⚠️ Tiempo de espera','El servidor tardó demasiado. Intente de nuevo.','warning');
+    else if(!silent) toast('⚠️ Error de red','Verifique su conexión e intente de nuevo.','warning');
     return null;
+  }
+}
+
+// ── POST para envío de PDF (sin límite de URL) ──
+async function callGASPost(body) {
+  if (!GAS_URL || GAS_URL === 'PEGUE_SU_URL_GAS_AQUI') return null;
+  document.getElementById('sendingOverlay').classList.add('active');
+  try {
+    const controller = new AbortController();
+    const timeoutId  = setTimeout(() => controller.abort(), 60000); // 60s — PDFs grandes pueden tardar
+    const res  = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(body), signal: controller.signal });
+    clearTimeout(timeoutId);
+    const text = await res.text();
+    try { return JSON.parse(text); } catch { return null; }
+  } catch(e) {
+    if (e.name === 'AbortError') toast('Tiempo de espera', 'El servidor tardó demasiado. Intente de nuevo.', 'warning');
+    else toast('Error de red', 'Verifique su conexión e intente de nuevo.', 'warning');
+    return null;
+  } finally {
+    document.getElementById('sendingOverlay').classList.remove('active');
   }
 }
 
@@ -565,7 +843,7 @@ async function confirmEdit(){
   const t=tickets.find(t=>t.id===editData.ticketId); if(!t) return;
   const ini=getField('edit-ini'),fin=getField('edit-fin');
   const turno=getField('edit-turno'),reason=getField('edit-reason');
-  if(!ini||!fin||fin<ini){alert('Verifique las fechas');return;}
+  if(!ini||!fin||fin<ini){toast('⚠️ Fechas inválidas','Verifique las fechas de inicio y fin','warning');return;}
   const bday=getEmpBirthday(currentUser);
   const{days}=countWorkdays(ini,fin,bday);
   t.details.inicio=ini; t.details.fin=fin; t.details.dias=days; t.details.turno=turno;
@@ -639,16 +917,31 @@ function populateEmpFilter(){
 }
 
 function resetFilters(){
-  ['filt-status','filt-tipo','filt-emp'].forEach(id=>document.getElementById(id).value='');
+  ['filt-adm-year','filt-adm-month','filt-status','filt-tipo','filt-emp'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
   renderAdmin();
 }
 
 function renderAdmin(){
   // tickets ya cargados desde Sheets en loadAllTickets()
+
+  // Poblar filtro de años
+  const years=[...new Set(tickets.map(t=>(t.fecha||'').split('-')[0]).filter(Boolean))].sort().reverse();
+  const yrSel=document.getElementById('filt-adm-year');
+  if(yrSel){
+    const cur=yrSel.value;
+    yrSel.innerHTML='<option value="">Todos los años</option>'+years.map(y=>`<option value="${y}"${y===cur?' selected':''}>${y}</option>`).join('');
+  }
+
+  const fy=yrSel?yrSel.value:'';
+  const fm=document.getElementById('filt-adm-month')?.value||'';
   const fs=document.getElementById('filt-status').value;
   const ft=document.getElementById('filt-tipo').value;
   const fe=document.getElementById('filt-emp').value;
   let list=[...tickets].reverse();
+  if(fy) list=list.filter(t=>(t.fecha||'').startsWith(fy));
+  if(fm) list=list.filter(t=>(t.fecha||'').substring(5,7)===fm);
   if(fs) list=list.filter(t=>t.status===fs);
   if(ft) list=list.filter(t=>t.tipo===ft);
   if(fe) list=list.filter(t=>t.empleado===fe);
@@ -670,8 +963,8 @@ function renderAdmin(){
     return`<div class="admin-ticket">
       <div class="at-head">
         <div>
-          <div class="at-name">${t.empleado}</div>
-          <div class="at-meta">${t.puesto} · <strong>${t.id}</strong> · ${fmt(t.fecha)}${emp?` · 📧 ${emp.email}`:''}</div>
+          <div class="at-name">${escHTML(t.empleado)}</div>
+          <div class="at-meta">${escHTML(t.puesto)} · <strong>${escHTML(t.id)}</strong> · ${fmt(t.fecha)}${emp?` · 📧 ${escHTML(emp.email)}`:''}</div>
           ${vi}
           ${t.tipo==='singoce'?`<div class="at-meta" style="color:var(--orange)">⚠️ Sin goce: no descuenta vacaciones, sí descuenta salario</div>`:''}
           ${t.editCount?`<div class="at-meta">✏️ Editada ${t.editCount}x</div>`:''}
@@ -683,8 +976,8 @@ function renderAdmin(){
         <div class="at-detail">
           <strong>${tlabel(t.tipo)}</strong><br>
           ${buildDet(t).replace(/\n/g,'<br>')}
-          ${t.obs?`<br><em style="color:var(--g400)">💬 ${t.obs}</em>`:''}
-          ${t.notaAdmin?`<br><span style="color:var(--b700);font-weight:600">📝 RRHH: ${t.notaAdmin}</span>`:''}
+          ${t.obs?`<br><em style="color:var(--g400)">💬 ${escHTML(t.obs)}</em>`:''}
+          ${t.notaAdmin?`<br><span style="color:var(--b700);font-weight:600">📝 RRHH: ${escHTML(t.notaAdmin)}</span>`:''}
         </div>
         <div class="at-btns">
           ${!resolved?`
@@ -714,6 +1007,8 @@ function openResolve(ticketId,action){
   document.getElementById('resolveTitle').textContent   =ia?'✅ Aprobar solicitud':'❌ Denegar solicitud';
   document.getElementById('resolveSubtitle').textContent=`${t.empleado} · ${tlabel(t.tipo)} · ${t.id}${emp?` · → ${emp.email}`:''}`;
   document.getElementById('resolveNote').value='';
+  const noteEl=document.getElementById('resolveEmailNote');
+  if(noteEl) noteEl.textContent=`⚡ Se enviarán correos a ${RRHH_EMAILS_LABEL} y al colaborador.`;
   const btn=document.getElementById('resolveBtn');
   btn.textContent=ia?'✅ Confirmar aprobación':'❌ Confirmar denegación';
   btn.style.background=ia?'linear-gradient(135deg,#10B981,#059669)':'linear-gradient(135deg,#EF4444,#DC2626)';
@@ -752,7 +1047,7 @@ async function confirmResolve(){
 // ADMIN — Expedientes
 // ══════════════════════════════
 async function loadExpAdmin(){
-  const cedula=getField('expEmpSelect'); if(!cedula){alert('Seleccione un colaborador');return;}
+  const cedula=getField('expEmpSelect'); if(!cedula){toast('⚠️ Acción requerida','Seleccione un colaborador','warning');return;}
   const emp=EMPLOYEES.find(e=>e.cedula===cedula); if(!emp) return;
   showOverlay('Cargando expediente...');
   const resE = await gasGet({action:'getExpediente', cedula});
@@ -792,6 +1087,22 @@ async function loadExpAdmin(){
 
 async function saveExpAdmin(){
   const cedula=getField('exp-cedula'); if(!cedula) return;
+  // Validar campos requeridos
+  const nombres=getField('exp-nombres').trim();
+  const ap1    =getField('exp-ap1').trim();
+  if(!nombres||!ap1){
+    toast('⚠️ Campos requeridos','Nombre(s) y Primer Apellido son obligatorios.','warning'); return;
+  }
+  // Validar formato de fecha de nacimiento si fue ingresada
+  const fnacVal=getField('exp-fnac').trim();
+  if(fnacVal && !/^\d{2}\/\d{2}\/\d{4}$/.test(fnacVal)){
+    toast('⚠️ Fecha inválida','La fecha de nacimiento debe ser DD/MM/YYYY — ejemplo: 30/01/1990','warning'); return;
+  }
+  // Validar email corporativo si fue ingresado
+  const emailcorpVal=getField('exp-emailcorp').trim();
+  if(emailcorpVal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailcorpVal)){
+    toast('⚠️ Correo inválido','El correo corporativo no tiene un formato válido.','warning'); return;
+  }
   expedientes[cedula]={
     nombres:   getField('exp-nombres'),  ap1:      getField('exp-ap1'),
     ap2:       getField('exp-ap2'),      genero:   getField('exp-genero'),
@@ -805,7 +1116,8 @@ async function saveExpAdmin(){
     salario:   getField('exp-salario'),
     profesion: getField('exp-profesion'),estudios: getField('exp-estudios'),
     meds:      getField('exp-meds'),     alergias: getField('exp-alergias'),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'admin'
   };
   saveExp();
   // Guardar en Google Sheets y confirmar
@@ -828,7 +1140,9 @@ function renderExpView(){
     el.innerHTML=`<div class="exp-empty"><div class="exp-icon">📋</div><p>Su expediente aún no ha sido completado por RRHH.<br>Contacte a su administrador.</p></div>`;
     return;
   }
-  const field=(label,val)=>`<div class="exp-field"><div class="exp-field-label">${label}</div><div class="exp-field-val ${!val?'empty':''}">${val||'No registrado'}</div></div>`;
+  const field=(label,val)=>`<div class="exp-field"><div class="exp-field-label">${label}</div><div class="exp-field-val ${!val?'empty':''}">${escHTML(val||'No registrado')}</div></div>`;
+  const maskIBAN = v => v ? v.slice(0,4)+' •••• •••• •••• '+v.slice(-4) : null;
+  const maskSal  = v => v ? '₡ ••••••' : null;
   el.innerHTML=`
     <div class="section-header"><div class="sh-icon">👤</div><h3>Datos Personales</h3></div>
     <div class="exp-grid">
@@ -850,11 +1164,14 @@ function renderExpView(){
     </div>
     <div class="section-header"><div class="sh-icon">🏦</div><h3>Bancario y Laboral</h3></div>
     <div class="exp-grid">
-      ${field('IBAN',exp.iban)}${field('Profesión',exp.profesion)}${field('Otros Estudios',exp.estudios)}
+      ${field('IBAN',maskIBAN(exp.iban))}${field('Salario',maskSal(exp.salario))}${field('Profesión',exp.profesion)}${field('Otros Estudios',exp.estudios)}
     </div>
     <div class="section-header"><div class="sh-icon">🏥</div><h3>Médico</h3></div>
     <div class="exp-grid">${field('Medicamentos',exp.meds)}${field('Alergias',exp.alergias)}</div>
-    <p style="font-size:11px;color:var(--g400);margin-top:14px;text-align:right">Última actualización: ${exp.updatedAt?fmt(exp.updatedAt.split('T')[0]):'—'}</p>`;
+    <p style="font-size:11px;color:var(--g400);margin-top:14px;text-align:right">
+      Última actualización: ${exp.updatedAt?fmt(exp.updatedAt.split('T')[0]):'—'}
+      ${exp.updatedBy?' · por '+escHTML(exp.updatedBy):''}
+    </p>`;
 }
 
 // ══════════════════════════════
@@ -875,9 +1192,11 @@ function renderTickets(){
 
   // Aplicar filtros
   const fy=yearSel?yearSel.value:'';
+  const fm=document.getElementById('filt-month-emp')?document.getElementById('filt-month-emp').value:'';
   const ft=document.getElementById('filt-tipo-emp')?document.getElementById('filt-tipo-emp').value:'';
   let filtered=[...mine].reverse();
   if(fy) filtered=filtered.filter(t=>t.fecha.startsWith(fy));
+  if(fm) filtered=filtered.filter(t=>(t.fecha||'').substring(5,7)===fm);
   if(ft) filtered=filtered.filter(t=>t.tipo===ft);
 
   const el=document.getElementById('ticketsList');
@@ -936,14 +1255,14 @@ function selectAllTickets(){
 function downloadSelectedPDF(){
   const ids=selectedTickets.size>0?[...selectedTickets]:tickets.filter(t=>t.cedula===currentUser.cedula).map(t=>t.id);
   const sel=tickets.filter(t=>ids.includes(t.id));
-  if(!sel.length){alert('No hay solicitudes para descargar');return;}
+  if(!sel.length){toast('⚠️ Sin datos','No hay solicitudes para descargar','warning');return;}
   downloadTicketsPDF(sel,`Mis Solicitudes — ${currentUser.nombre}`);
 }
 
 function downloadSelectedCSV(){
   const ids=selectedTickets.size>0?[...selectedTickets]:tickets.filter(t=>t.cedula===currentUser.cedula).map(t=>t.id);
   const sel=tickets.filter(t=>ids.includes(t.id));
-  if(!sel.length){alert('No hay solicitudes para descargar');return;}
+  if(!sel.length){toast('⚠️ Sin datos','No hay solicitudes para descargar','warning');return;}
   downloadTicketsCSV(sel,`solicitudes_${currentUser.cedula}`);
 }
 
@@ -1071,7 +1390,11 @@ function downloadTicketsPDF(list, titulo){
   <div class="footer">© 2026 Lean Consulting S.A. — Portal de Recursos Humanos — Documento generado automáticamente</div>
   </body></html>`;
 
-  const w=window.open('','_blank');
+  const w = window.open('','_blank');
+  if(!w || w.closed || typeof w.closed === 'undefined') {
+    toast('⚠️ Ventana bloqueada','Active las ventanas emergentes (popups) en su navegador para descargar el PDF.','warning');
+    return;
+  }
   w.document.write(html);
   w.document.close();
   w.print();
@@ -1109,11 +1432,18 @@ function updateStats(){
   const mine=tickets.filter(t=>t.cedula===currentUser.cedula);
   const vac=calcVac(currentUser);
   const pd =calcPD(currentUser);
+  const bday=calcBirthday(currentUser);
   const dEl=document.getElementById('statVac');
   dEl.textContent=vac.disp<0?vac.disp+' ⚠️':vac.disp;
   dEl.style.color=vac.disp<0?'var(--red)':vac.disp<=3?'var(--orange)':'var(--g800)';
   document.getElementById('statApro').textContent=mine.filter(t=>t.status==='approved').length;
   document.getElementById('statPend').textContent=mine.filter(t=>['pending','inprogress'].includes(t.status)).length;
+  // Día cumpleaños
+  const bdayEl=document.getElementById('statBday');
+  if(bdayEl){
+    bdayEl.textContent=bday.disp<=0?'0 ✓':bday.disp;
+    bdayEl.style.color=bday.disp<=0?'var(--green)':'var(--g800)';
+  }
   // Personal Days
   const pdEl=document.getElementById('statPD');
   if(pdEl){
@@ -1124,41 +1454,73 @@ function updateStats(){
 
 function updateVacTab(){
   if(!currentUser) return;
-  const v=calcVac(currentUser);
-  const pd=calcPD(currentUser);
+  const v    = calcVac(currentUser);
+  const pd   = calcPD(currentUser);
+  const bday = calcBirthday(currentUser);
 
   // Vacaciones
-  document.getElementById('vacIngreso').textContent=fmt(currentUser.ingreso);
-  document.getElementById('vacMeses').textContent=v.meses;
-  document.getElementById('vacAcum').textContent=v.acum;
-  document.getElementById('vacCons').textContent=v.usados;
-  const dEl=document.getElementById('vacDisp');
-  dEl.textContent=v.disp<0?v.disp+' ⚠️':v.disp;
-  dEl.style.color=v.disp<0?'var(--red)':v.disp<=3?'var(--orange)':'var(--green)';
-  const prog=document.getElementById('vacProg');
-  prog.style.width=v.pct+'%';
-  prog.style.background=v.pct>=100?'linear-gradient(90deg,var(--orange),var(--red))':
-    v.pct>=80?'linear-gradient(90deg,var(--orange),#F59E0B)':'linear-gradient(90deg,var(--b400),var(--b600))';
-  document.getElementById('vacProx').textContent=fmt(v.prox);
+  document.getElementById('vacIngreso').textContent = fmtLong(currentUser.ingreso);
+  document.getElementById('vacMeses').textContent   = v.meses;
+  document.getElementById('vacAcum').textContent    = v.acum;
+  document.getElementById('vacCons').textContent    = v.usados;
+  const dEl = document.getElementById('vacDisp');
+  dEl.textContent  = v.disp < 0 ? v.disp+' ⚠️' : v.disp;
+  dEl.style.color  = v.disp < 0 ? 'var(--red)' : v.disp <= 3 ? 'var(--orange)' : 'var(--green)';
+  const prog = document.getElementById('vacProg');
+  prog.style.width      = v.pct+'%';
+  prog.style.background = v.pct>=100 ? 'linear-gradient(90deg,var(--orange),var(--red))' :
+    v.pct>=80 ? 'linear-gradient(90deg,var(--orange),#F59E0B)' : 'linear-gradient(90deg,var(--b400),var(--b600))';
+  document.getElementById('vacProx').textContent = fmt(v.prox);
+
+  // Cumpleaños
+  const bdayTotalEl = document.getElementById('bdayTotal');
+  const bdayUsadoEl = document.getElementById('bdayUsado');
+  const bdayDispEl  = document.getElementById('bdayDisp');
+  if(bdayTotalEl) bdayTotalEl.textContent = bday.total;
+  if(bdayUsadoEl) bdayUsadoEl.textContent = bday.used;
+  if(bdayDispEl) {
+    bdayDispEl.textContent = bday.disp <= 0 ? '0 ✓' : bday.disp;
+    bdayDispEl.style.color = bday.disp <= 0 ? 'var(--green)' : 'var(--g800)';
+  }
 
   // Personal Days
-  const pdTotalEl =document.getElementById('pdTotal');
-  const pdUsadosEl=document.getElementById('pdUsados');
-  const pdDispEl  =document.getElementById('pdDisp');
-  if(pdTotalEl)  pdTotalEl.textContent=pd.total;
-  if(pdUsadosEl) pdUsadosEl.textContent=pd.usados;
-  if(pdDispEl){
-    pdDispEl.textContent=pd.disp<=0?'0 ⚠️':pd.disp;
-    pdDispEl.style.color=pd.disp<=0?'var(--red)':pd.disp===1?'var(--orange)':'var(--green)';
+  const pdTotalEl  = document.getElementById('pdTotal');
+  const pdUsadosEl = document.getElementById('pdUsados');
+  const pdDispEl   = document.getElementById('pdDisp');
+  if(pdTotalEl)  pdTotalEl.textContent  = pd.total;
+  if(pdUsadosEl) pdUsadosEl.textContent = pd.usados;
+  if(pdDispEl) {
+    pdDispEl.textContent = pd.disp <= 0 ? '0 ⚠️' : pd.disp;
+    pdDispEl.style.color = pd.disp <= 0 ? 'var(--red)' : pd.disp===1 ? 'var(--orange)' : 'var(--green)';
   }
-  // Aviso vencimiento — aplica para todos (PD no acumulables, vencen 31/12)
-  const venceMsg=document.getElementById('pdVenceMsg');
-  if(venceMsg){
-    venceMsg.style.display='block';
+  // Aviso vencimiento PD
+  const venceMsg = document.getElementById('pdVenceMsg');
+  if(venceMsg) {
+    venceMsg.style.display = 'block';
     const dispTxt = pd.disp <= 0
       ? `Ya utilizó todos sus Personal Days de ${pd.anio}.`
       : `Tiene <strong>${pd.disp}</strong> Personal Day(s) disponible(s). Vencen el <strong>31/12/${pd.anio}</strong> — no son acumulables.`;
     venceMsg.innerHTML = `⚠️ ${dispTxt}`;
+  }
+
+  // Lista de vacaciones aprobadas
+  const vacListEl = document.getElementById('vacListAprobadas');
+  if(vacListEl) {
+    const aprobadas = tickets
+      .filter(t => t.cedula === currentUser.cedula && t.tipo === 'vacaciones' && t.status === 'approved')
+      .sort((a,b) => (b.details.inicio||'').localeCompare(a.details.inicio||''));
+    if(!aprobadas.length) {
+      vacListEl.innerHTML = '<p class="vac-list-empty">No hay vacaciones aprobadas registradas.</p>';
+    } else {
+      vacListEl.innerHTML = aprobadas.map(t => `
+        <div class="vac-list-row">
+          <div>
+            <div class="vac-list-dates">${fmt(t.details.inicio)} → ${fmt(t.details.fin)}</div>
+            <div class="vac-list-meta">${escHTML(t.details.turno||'Día completo')} · ${escHTML(t.id)}</div>
+          </div>
+          <div class="vac-list-days">−${t.details.dias} día(s)</div>
+        </div>`).join('');
+    }
   }
 }
 
@@ -1168,19 +1530,48 @@ function updateVacTab(){
 function openModal(id) {document.getElementById(id).classList.add('active');}
 function closeModal(id){document.getElementById(id).classList.remove('active');}
 
-function toast(title,msg){
+// type: 'success' | 'error' | 'warning' | 'info'
+function toast(title, msg, type='success'){
   document.getElementById('toastTitle').textContent=title;
   document.getElementById('toastMsg').textContent=msg;
   const el=document.getElementById('toast');
+  el.className=''; // limpiar tipo anterior
+  el.classList.add('toast-'+type);
   el.style.display='block';
+  el.setAttribute('aria-live','polite');
   clearTimeout(window._toastTimer);
   window._toastTimer=setTimeout(()=>el.style.display='none',5500);
+}
+
+// ── CONFIRM MODAL (reemplaza confirm() nativo) ──
+let _confirmResolve = null;
+
+function showConfirm(title, msg, confirmText='Confirmar', isDanger=false){
+  return new Promise(resolve => {
+    _confirmResolve = resolve;
+    document.getElementById('confirmModalTitle').textContent = title;
+    document.getElementById('confirmModalMsg').innerHTML    = msg;
+    const btn = document.getElementById('confirmModalBtn');
+    btn.textContent = confirmText;
+    btn.className   = isDanger ? 'btn-danger' : 'btn-submit';
+    openModal('confirmModal');
+  });
+}
+
+function _resolveConfirm(val){
+  closeModal('confirmModal');
+  if(_confirmResolve){ _confirmResolve(val); _confirmResolve=null; }
 }
 
 // ══════════════════════════════
 // ADMIN — Gestión de Colaboradores
 // ══════════════════════════════
 let colabToDelete = null;
+let _colabSearchTimer = null;
+function debounceColabSearch() {
+  clearTimeout(_colabSearchTimer);
+  _colabSearchTimer = setTimeout(renderColabList, 220);
+}
 
 async function loadColabTab() {
   const el = document.getElementById('colabList');
@@ -1210,14 +1601,14 @@ function renderColabList() {
         <div class="at-head">
           <div style="flex:1">
             <div class="at-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              ${e.nombre}
+              ${escHTML(e.nombre)}
               <span style="font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600;
                 background:${acceso?'#D1FAE5':'#FEE2E2'};color:${acceso?'#065F46':'#991B1B'}">
                 ${acceso?'✅ Activo':'🚫 Sin acceso'}
               </span>
             </div>
-            <div class="at-meta">Cédula: <strong>${e.cedula}</strong>${e.puesto?' &nbsp;·&nbsp; '+e.puesto:' &nbsp;·&nbsp; <em style="color:var(--g400)">Sin puesto — completar en Expedientes</em>'}</div>
-            ${e.email?`<div class="at-meta">📧 ${e.email}</div>`:''}
+            <div class="at-meta">Cédula: <strong>${escHTML(e.cedula)}</strong>${e.puesto?' &nbsp;·&nbsp; '+escHTML(e.puesto):' &nbsp;·&nbsp; <em style="color:var(--g400)">Sin puesto — completar en Expedientes</em>'}</div>
+            ${e.email?`<div class="at-meta">📧 ${escHTML(e.email)}</div>`:''}
             ${e.ingreso&&vac?`<div class="at-meta">📅 Ingreso: ${fmt(e.ingreso)} &nbsp;·&nbsp;
               🏖️ <strong style="color:${vac.disp<0?'var(--red)':vac.disp<=3?'var(--orange)':'var(--green)'}">${vac.disp} días vac.</strong> &nbsp;·&nbsp;
               ⭐ <strong style="color:${pd.disp<=0?'var(--red)':pd.disp===1?'var(--orange)':'var(--green)'}">${pd.disp} PD</strong>
@@ -1251,10 +1642,13 @@ async function saveColab() {
   const acceso  = document.getElementById('colab-acceso').value;
 
   if (!cedula||!nombres||!ap1) {
-    alert('Complete al menos nombre(s), primer apellido y cédula'); return;
+    toast('⚠️ Campos requeridos','Complete al menos nombre(s), primer apellido y cédula','warning'); return;
+  }
+  if (!validateCedula(cedula)) {
+    toast('⚠️ Cédula inválida','Ingrese una cédula válida (8–12 dígitos)','warning'); return;
   }
   if (EMPLOYEES.find(e=>e.cedula===cedula)) {
-    alert('Ya existe un colaborador con esa cédula'); return;
+    toast('⚠️ Cédula duplicada','Ya existe un colaborador con esa cédula','warning'); return;
   }
 
   const nombre = [nombres, ap1, ap2].filter(Boolean).join(' ');
@@ -1297,11 +1691,11 @@ async function confirmAcceso() {
     await loadEmployees();
     renderColabList();
     toast(
-      acceso==='activo' ? '✅ Acceso habilitado' : '🚫 Acceso deshabilitado',
+      acceso==='activo' ? 'Acceso habilitado' : 'Acceso deshabilitado',
       acceso==='activo' ? 'El colaborador puede ingresar al portal' : 'El colaborador no puede ingresar al portal'
     );
   } else {
-    toast('❌ Error', 'No se pudo actualizar el acceso');
+    toast('Error', 'No se pudo actualizar el acceso','error');
   }
 }
 
@@ -1328,9 +1722,523 @@ async function confirmDeleteColab() {
     await loadEmployees();
     renderColabList();
     refreshEmpSelect();
-    toast('🗑️ Colaborador eliminado', 'Removido del sistema');
+    toast('Colaborador eliminado', 'Removido del sistema','success');
   } else {
-    toast('❌ Error', 'No se pudo eliminar del Sheet');
+    toast('Error', 'No se pudo eliminar del Sheet','error');
   }
   colabToDelete = null;
+}
+
+// ══════════════════════════════
+// SESIÓN PERSISTENTE — restaurar al recargar
+// ══════════════════════════════
+async function restoreSession() {
+  const saved = sessionStorage.getItem('hr_session');
+  if (!saved) return;
+  try {
+    const s = JSON.parse(saved);
+    if (s.isAdmin) {
+      // Verificar que la sesión admin no haya expirado (8 horas)
+      if (!s.exp || Date.now() > s.exp) {
+        sessionStorage.removeItem('hr_session');
+        return;
+      }
+      isAdmin = true;
+      show('adminScreen');
+      await Promise.all([loadEmployees(), loadAllTickets()]);
+      populateEmpFilter(); renderAdmin(); refreshEmpSelect();
+    } else if (s.cedula) {
+      if (EMPLOYEES.length === 0) await loadEmployees();
+      const emp = EMPLOYEES.find(e => e.cedula === s.cedula);
+      if (!emp || emp.acceso === 'inactivo') { sessionStorage.removeItem('hr_session'); return; }
+      currentUser = emp; isAdmin = false;
+      show('appScreen');
+      document.getElementById('userName').textContent   = emp.nombre.split(' ').slice(0,2).join(' ');
+      document.getElementById('userCedula').textContent = 'Cédula: '+emp.cedula;
+      document.getElementById('userAvatar').textContent = emp.nombre[0];
+      await loadUserData(emp.cedula);
+      updateStats(); renderTickets(); updateVacTab(); renderExpView();
+    }
+  } catch(e) { sessionStorage.removeItem('hr_session'); }
+}
+
+// ══════════════════════════════
+// DETECCIÓN OFFLINE
+// ══════════════════════════════
+function _updateOfflineBanner() {
+  const banner = document.getElementById('offlineBanner');
+  if (!banner) return;
+  banner.classList.toggle('visible', !navigator.onLine);
+}
+
+window.addEventListener('online',  () => {
+  _updateOfflineBanner();
+  toast('Conexión restaurada', 'Sincronizando datos en tiempo real', 'success');
+});
+window.addEventListener('offline', () => {
+  _updateOfflineBanner();
+  toast('Sin conexión', 'Mostrando datos en caché local', 'warning');
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  _updateOfflineBanner();
+  restoreSession();
+  // Pre-cargar lista de empleados en segundo plano para que el login sea inmediato
+  if (GAS_URL && GAS_URL !== 'PEGUE_SU_URL_GAS_AQUI') {
+    loadEmployees();
+  }
+});
+
+// ══════════════════════════════════════════════════════
+// COMPROBANTES DE PAGO
+// ══════════════════════════════════════════════════════
+
+// ── Estado local ──
+let compPDFFile        = null; // PDF seleccionado por el admin
+let misComprobantes    = [];   // comprobantes del colaborador actual
+let currentComprobante = null; // para modal de detalle
+
+// ── Período automático: mes anterior al envío ──
+// ── Lee el período seleccionado manualmente por el admin ──
+function getSelectedPeriodo() {
+  const meses = ['enero','febrero','marzo','abril','mayo','junio',
+                 'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const mes  = document.getElementById('compPeriodoMes')?.value  || '';
+  const anio = document.getElementById('compPeriodoAnio')?.value || '';
+  if (!mes || !anio) return null;
+  return {
+    value: `${anio}-${mes}`,
+    label: meses[parseInt(mes, 10) - 1] + ' ' + anio,
+  };
+}
+
+// ── Cargar selector de colaboradores y preseleccionar el mes anterior ──
+function loadCompColabSelector() {
+  const sel = document.getElementById('compColabSelect');
+  if (!sel) return;
+  const lista = (EMPLOYEES || []).filter(e => e.acceso !== 'inactivo');
+  sel.innerHTML = '<option value="">Seleccione un colaborador...</option>' +
+    lista.map(e => `<option value="${escHTML(e.cedula)}">${escHTML(e.nombre)}</option>`).join('');
+
+  // Preseleccionar mes anterior como punto de partida (el admin puede cambiarlo)
+  const now  = new Date();
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const mesSel  = document.getElementById('compPeriodoMes');
+  const anioInp = document.getElementById('compPeriodoAnio');
+  if (mesSel)  mesSel.value  = String(prev.getMonth() + 1).padStart(2, '0');
+  if (anioInp) anioInp.value = prev.getFullYear();
+}
+
+// ── Drag & Drop PDF ──
+function handleCompPDFDrop(event) {
+  event.preventDefault();
+  document.getElementById('compPDFZone').classList.remove('drag-over');
+  const file = event.dataTransfer.files[0];
+  if (file) selectCompPDF(file);
+}
+
+function selectCompPDF(file) {
+  if (!file || file.type !== 'application/pdf') {
+    toast('Formato inválido', 'Solo se aceptan archivos .pdf', 'error');
+    return;
+  }
+  compPDFFile = file;
+  document.getElementById('compPDFName').textContent = file.name;
+  const zone = document.getElementById('compPDFZone');
+  zone.style.borderColor = 'var(--b500)';
+  zone.style.background  = 'var(--cyan-l)';
+}
+
+function resetCompPDF() {
+  compPDFFile = null;
+  const inp = document.getElementById('compPDFInput');
+  if (inp) inp.value = '';
+  document.getElementById('compPDFName').textContent = 'Arrastrá el comprobante PDF aquí o hacé clic para seleccionar';
+  const zone = document.getElementById('compPDFZone');
+  zone.style.borderColor = '';
+  zone.style.background  = '';
+  const cb = document.getElementById('compMsgCheck');
+  if (cb) { cb.checked = false; toggleCompMsg(cb); }
+}
+
+// ── Enviar comprobante PDF ──
+async function sendComprobantePDF() {
+  const cedula = document.getElementById('compColabSelect')?.value;
+  if (!cedula)      { toast('Colaborador requerido', 'Seleccione un colaborador', 'warning'); return; }
+  if (!compPDFFile) { toast('PDF requerido', 'Seleccione el PDF del comprobante', 'warning'); return; }
+
+  const periodo = getSelectedPeriodo();
+  if (!periodo) { toast('Período requerido', 'Seleccione el mes y año del período', 'warning'); return; }
+
+  const pdfBase64 = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = e => resolve(e.target.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(compPDFFile);
+  });
+
+  const emp = (EMPLOYEES || []).find(e => e.cedula === cedula);
+  showOverlay('Enviando comprobante...');
+
+  const msgCheck = document.getElementById('compMsgCheck');
+  const mensajeExtra = (msgCheck?.checked && document.getElementById('compMsgText')?.value.trim())
+    ? document.getElementById('compMsgText').value.trim()
+    : '';
+
+  const res = await callGASPost({
+    action:       'sendComprobantePDF',
+    cedula,
+    nombre:       emp?.nombre || '',
+    periodo:      periodo.value,
+    periodoLabel: periodo.label,
+    pdfBase64,
+    pdfName:      compPDFFile.name,
+    mensajeExtra,
+  });
+
+  hideOverlay();
+
+  if (res && res.ok) {
+    toast('Comprobante enviado', `Correo enviado a ${escHTML(res.data?.emailTo || emp?.nombre || cedula)}`, 'success');
+    resetCompPDF();
+    document.getElementById('compColabSelect').value = '';
+    loadCompAdminHistory();
+  } else {
+    toast('Error al enviar', res?.error || 'Verifique que el colaborador tenga correo en su expediente', 'error');
+  }
+}
+
+// ── Mensaje extra toggle ──
+function toggleCompMsg(cb) {
+  document.getElementById('compMsgExtra').style.display = cb.checked ? 'block' : 'none';
+  if (!cb.checked) document.getElementById('compMsgText').value = '';
+}
+
+// ── Historial admin ──
+let _compAdminData = [];
+
+async function loadCompAdminHistory() {
+  const res = await gasGet({ action: 'getComprobantesAdmin' });
+  const list = document.getElementById('compAdminHistoryList');
+  if (!res || !res.ok || !res.data || res.data.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">—</div><div>No hay comprobantes enviados aún</div></div>';
+    return;
+  }
+  _compAdminData = res.data;
+
+  // Poblar filtros de colaborador y año
+  const colabs = [...new Map(_compAdminData.map(c => [c.cedula, c.nombre])).entries()];
+  const years  = [...new Set(_compAdminData.map(c => (c.periodo||'').split('-')[0]).filter(Boolean))].sort().reverse();
+
+  const fColab = document.getElementById('histFiltColab');
+  if (fColab) {
+    fColab.innerHTML = '<option value="">Todos</option>' +
+      colabs.map(([ced, nom]) => `<option value="${escHTML(ced)}">${escHTML(nom||ced)}</option>`).join('');
+  }
+  const fYear = document.getElementById('histFiltYear');
+  if (fYear) {
+    fYear.innerHTML = '<option value="">Todos</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+  }
+
+  filterCompAdminHistory();
+}
+
+function filterCompAdminHistory() {
+  const list  = document.getElementById('compAdminHistoryList');
+  const fCol  = document.getElementById('histFiltColab')?.value  || '';
+  const fYear = document.getElementById('histFiltYear')?.value   || '';
+  const fMo   = document.getElementById('histFiltMonth')?.value  || '';
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+  const filtered = _compAdminData.filter(c => {
+    const [cy, cm] = (c.periodo||'').split('-');
+    if (fCol  && c.cedula !== fCol)  return false;
+    if (fYear && cy !== fYear)       return false;
+    if (fMo   && cm !== fMo)         return false;
+    return true;
+  }).sort((a,b) => (b.periodo||'').localeCompare(a.periodo||''));
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">—</div><div>No hay comprobantes para los filtros seleccionados</div></div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(c => {
+    const [cy, cm] = (c.periodo||'').split('-');
+    const label = cm ? `${meses[parseInt(cm)-1]} ${cy}` : (c.periodo||'—');
+    const driveUrl = c.drive_url || '';
+    return `<div class="comp-card">
+      <div class="comp-card-left">
+        <div class="comp-card-badge" style="font-size:9px">${(c.periodo||'').replace('-','/')}</div>
+        <div>
+          <div class="comp-card-period">${escHTML(c.nombre||'—')}</div>
+          <div class="comp-card-meta">${label} · Enviado el ${escHTML(c.fecha_envio||'—')}</div>
+        </div>
+      </div>
+      <div class="comp-card-right" style="gap:6px">
+        ${driveUrl ? `<a href="${escHTML(driveUrl)}" target="_blank" class="btn-sec" style="font-size:11px;padding:4px 10px;text-decoration:none">Ver PDF</a>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Comprobantes colaborador ──
+async function loadMisComprobantes() {
+  if (!currentUser) return;
+  const el = document.getElementById('misComprobantes');
+  el.innerHTML = '<div class="empty-state"><div class="empty-icon">...</div><div>Cargando...</div></div>';
+
+  const res = await gasGet({ action: 'getComprobantes', cedula: currentUser.cedula });
+  if (!res || !res.ok || !res.data) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">—</div><div>No se pudieron cargar los comprobantes</div></div>';
+    return;
+  }
+  misComprobantes = res.data;
+
+  // Poblar filtro de años
+  const years = [...new Set(misComprobantes.map(c => (c.periodo||'').split('-')[0]).filter(Boolean))].sort().reverse();
+  const yrSel = document.getElementById('comp-filt-year');
+  yrSel.innerHTML = '<option value="">Todos los años</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+
+  renderMisComprobantes();
+}
+
+function renderMisComprobantes() {
+  const el   = document.getElementById('misComprobantes');
+  const yr   = document.getElementById('comp-filt-year')?.value  || '';
+  const mo   = document.getElementById('comp-filt-month')?.value || '';
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+  const filtered = misComprobantes.filter(c => {
+    const [cy, cm] = (c.periodo || '').split('-');
+    if (yr && cy !== yr) return false;
+    if (mo && cm !== mo) return false;
+    return true;
+  }).sort((a,b) => (b.periodo||'').localeCompare(a.periodo||''));
+
+  if (filtered.length === 0) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">—</div><div>No hay comprobantes para el período seleccionado</div></div>';
+    return;
+  }
+
+  el.innerHTML = filtered.map((c, i) => {
+    const [cy, cm] = (c.periodo || '').split('-');
+    const label    = cm ? `${meses[parseInt(cm)-1]} ${cy}` : c.periodo;
+    const driveUrl = c.drive_url || '';
+    return `<div class="comp-card">
+      <div class="comp-card-left" style="cursor:pointer;flex:1" onclick="openCompModal(${i})">
+        <div class="comp-card-badge">${(c.periodo||'').replace('-','/')}</div>
+        <div>
+          <div class="comp-card-period">${label}</div>
+          <div class="comp-card-meta">${escHTML(c.descripcion || 'Comprobante de pago')} · ${escHTML(c.fecha_envio||'')}</div>
+        </div>
+      </div>
+      <div class="comp-card-right" style="gap:6px;align-items:center">
+        ${driveUrl
+          ? `<a href="${escHTML(driveUrl)}" target="_blank" rel="noopener"
+               class="btn-cyan" style="font-size:11px;padding:5px 12px;text-decoration:none;white-space:nowrap">
+               Descargar PDF
+             </a>`
+          : `<span style="font-size:11px;color:var(--g300)">Enviado por correo</span>`
+        }
+      </div>
+    </div>`;
+  }).join('');
+
+  // Guardar referencia para el modal
+  window._filteredComprobantes = filtered;
+}
+
+function openCompModal(idx) {
+  const c = window._filteredComprobantes[idx];
+  if (!c) return;
+  currentComprobante = c;
+
+  const [cy, cm] = (c.periodo || '').split('-');
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const label = cm ? `${meses[parseInt(cm)-1]} ${cy}` : c.periodo;
+
+  document.getElementById('compModalTitle').textContent = `Comprobante — ${label}`;
+
+  const fmt = n => (parseFloat(n)||0).toLocaleString('es-CR');
+  const v   = k => parseFloat(c[k]) || 0;
+
+  const diasTrab      = v('dias_trabajados');
+  const salarioMes    = v('salario_mes');
+  const bono          = v('bono');
+  const horasDobles   = v('horas_dobles');
+  const subsidio      = v('subsidio');
+  const totalBenef    = v('total_beneficios') || (salarioMes + bono + horasDobles + subsidio);
+  const pension       = v('pension_voluntaria');
+  const ccss          = v('ccss');
+  const renta         = v('renta');
+  const cxc           = v('cxc');
+  const totalRebaj    = v('total_rebajos') || (pension + ccss + renta + cxc);
+  const neto          = v('salario_neto');
+
+  const detRow = (label, val, accent) => val ? `
+    <div class="comp-detail-row">
+      <span class="comp-detail-label">${label}</span>
+      <span class="comp-detail-val" ${accent?`style="color:var(--orange)"`:''}>${accent?'- ':''}₡ ${fmt(val)}</span>
+    </div>` : '';
+
+  document.getElementById('compModalBody').innerHTML = `
+    <div style="background:var(--b50);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--b700)">
+      <strong>Puesto:</strong> ${escHTML(c.puesto||'—')} &nbsp;·&nbsp;
+      <strong>Ingreso:</strong> ${escHTML(c.fecha_ingreso||'—')} &nbsp;·&nbsp;
+      ${escHTML(c.descripcion||'Planilla ordinaria')}
+    </div>
+    <div style="font-size:11px;font-weight:700;color:var(--b600);letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--b100)">Beneficios</div>
+    <div class="comp-detail-row" style="font-size:11px;color:var(--g400)">
+      <span class="comp-detail-label"></span><span class="comp-detail-val" style="font-size:10px;color:var(--g300)">Días trabajados: ${diasTrab||'—'}</span>
+    </div>
+    ${detRow('Salario Mes', salarioMes, false)}
+    ${detRow('Bono', bono, false)}
+    ${detRow('Horas Dobles / Tiempo Doble', horasDobles, false)}
+    ${detRow('Subsidio Incapacidad', subsidio, false)}
+    <div class="comp-detail-row" style="font-weight:700;border-top:1px solid var(--b100);padding-top:6px;margin-top:2px">
+      <span class="comp-detail-label">Total Beneficios</span>
+      <span class="comp-detail-val" style="color:var(--b600)">₡ ${fmt(totalBenef)}</span>
+    </div>
+    <div style="font-size:11px;font-weight:700;color:var(--b600);letter-spacing:.5px;text-transform:uppercase;margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--b100)">Deducciones</div>
+    ${detRow('CCSS 10.67%', ccss, true)}
+    ${detRow('Impuesto de Renta', renta, true)}
+    ${detRow('Pensión Voluntaria', pension, true)}
+    ${detRow('CxC', cxc, true)}
+    <div class="comp-detail-row" style="font-weight:700;border-top:1px solid var(--b100);padding-top:6px;margin-top:2px">
+      <span class="comp-detail-label">Total Deducciones</span>
+      <span class="comp-detail-val" style="color:var(--red)">- ₡ ${fmt(totalRebaj)}</span>
+    </div>
+    <div class="comp-detail-row total-row" style="margin-top:10px;padding-top:12px;border-top:2px solid var(--b500)">
+      <span class="comp-detail-label">Neto a Pagar</span>
+      <span class="comp-detail-val">₡ ${fmt(neto)}</span>
+    </div>
+  `;
+  openModal('compModal');
+}
+
+function printComprobante() {
+  if (!currentComprobante) return;
+  const c    = currentComprobante;
+  const pv   = k => parseFloat(c[k]) || 0;
+  const fmt  = n => (parseFloat(n)||0).toLocaleString('es-CR');
+
+  const [cy, cm] = (c.periodo || '').split('-');
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const label = cm ? `${meses[parseInt(cm)-1]} ${cy}` : c.periodo;
+  // Fecha larga ej: "31 de diciembre de 2025"
+  const dateLabel = (() => {
+    if (!cy || !cm) return label;
+    const lastDay = new Date(parseInt(cy), parseInt(cm), 0).getDate();
+    return `${lastDay} de ${meses[parseInt(cm)-1]} de ${cy}`;
+  })();
+
+  const diasTrab      = pv('dias_trabajados');
+  const salarioMes    = pv('salario_mes');
+  const bono          = pv('bono');
+  const horasDobles   = pv('horas_dobles');
+  const subsidio      = pv('subsidio');
+  const totalBenef    = pv('total_beneficios') || (salarioMes + bono + horasDobles + subsidio);
+  const pension       = pv('pension_voluntaria');
+  const ccss          = pv('ccss');
+  const renta         = pv('renta');
+  const cxc           = pv('cxc');
+  const totalRebaj    = pv('total_rebajos') || (pension + ccss + renta + cxc);
+  const neto          = pv('salario_neto');
+
+  const logoUrl = location.href.replace(/\/[^\/]*$/, '/') + 'assets/img/lean-logo.png';
+
+  const tr = (label, dias, monto, bold, red) =>
+    `<tr style="${bold?'font-weight:bold;':''}${red?'color:#CC0000;':''}">
+       <td style="padding:5px 8px;border-bottom:1px solid #ddd;font-size:12px">${label}</td>
+       <td style="padding:5px 8px;border-bottom:1px solid #ddd;font-size:12px;text-align:center">${dias||''}</td>
+       <td style="padding:5px 8px;border-bottom:1px solid #ddd;font-size:12px;text-align:right">${monto?fmt(monto):''}</td>
+     </tr>`;
+
+  const w = window.open('', '_blank', 'width=680,height=780');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+  <title>Comprobante ${label}</title>
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:Arial,sans-serif;color:#1a1a1a;margin:0;padding:32px;max-width:620px;margin:auto}
+    .logo-row{display:flex;align-items:flex-start;gap:18px;margin-bottom:6px}
+    .logo-img{height:56px;width:auto}
+    .logo-text{font-size:28px;font-weight:900;letter-spacing:-1px;line-height:1.1}
+    .logo-text span{color:#00B4D8}
+    .logo-sub{font-size:9px;letter-spacing:1.5px;color:#444;margin-top:2px}
+    .logo-line{border:none;border-top:1.5px solid #00B4D8;margin:0 0 10px}
+    h2{text-align:center;font-size:16px;font-weight:700;margin:10px 0 2px}
+    .fecha-center{text-align:center;font-size:12px;color:#555;margin-bottom:16px}
+    .info-table{width:100%;border-collapse:collapse;margin-bottom:16px}
+    .info-table td{font-size:12px;padding:4px 8px}
+    .info-table td:first-child{color:#1565C0;font-weight:600;width:140px}
+    .section-title{font-style:italic;font-weight:bold;font-size:13px;margin:8px 0 4px}
+    .detail-table{width:100%;border-collapse:collapse;margin-bottom:8px}
+    .detail-table th{font-size:11px;text-align:left;padding:5px 8px;background:#f0f0f0;border-bottom:1px solid #ccc}
+    .detail-table th:not(:first-child){text-align:right}
+    .neto-row td{font-weight:bold;font-size:14px;color:#052960;border-top:2px solid #1565C0;padding:8px}
+    .neto-row td:last-child{text-align:right}
+    footer{margin-top:24px;font-size:10px;color:#999;text-align:center}
+    @media print{body{padding:16px}}
+  </style></head><body>
+  <div class="logo-row">
+    <img class="logo-img" src="${logoUrl}" onerror="this.style.display='none';document.getElementById('logo-fallback').style.display='block'" alt="Lean Consulting"/>
+    <div id="logo-fallback" style="display:none">
+      <div class="logo-text">LE<span>A</span>N</div>
+      <div style="font-weight:900;font-size:14px;letter-spacing:1px">CONSULTING</div>
+      <div class="logo-sub">PROJECT MANAGEMENT</div>
+    </div>
+  </div>
+  <hr class="logo-line"/>
+  <h2>Comprobante de pago de planilla</h2>
+  <div class="fecha-center">${dateLabel}</div>
+
+  <table class="info-table">
+    <tr><td>Nombre:</td><td>${escHTML(c.nombre||currentUser?.nombre||'')}</td></tr>
+    <tr><td>Identificacion</td><td>${escHTML(c.cedula||currentUser?.cedula||'')}</td></tr>
+    <tr><td>Puesto</td><td>${escHTML(c.puesto||'')}</td></tr>
+    <tr><td>Fecha de Ingreso</td><td>${escHTML(c.fecha_ingreso||'')}</td></tr>
+    <tr><td>Salario Bruto</td><td style="text-align:right;font-weight:600">${fmt(totalBenef)}</td></tr>
+  </table>
+
+  <div style="border:1px solid #ccc;border-radius:4px;overflow:hidden">
+    <div style="background:#f7f7f7;padding:6px 8px;font-weight:bold;font-size:13px;border-bottom:1px solid #ccc">Detalle de Salario</div>
+    <div style="padding:8px">
+      <div class="section-title">Beneficios</div>
+      <table class="detail-table">
+        <thead><tr>
+          <th></th><th style="text-align:center">Dias trabajados</th><th style="text-align:right"></th>
+        </tr></thead>
+        <tbody>
+          ${tr('Salario Mes', diasTrab, salarioMes, false, false)}
+          ${bono         ? tr('Bono',                  '', bono,        false, false) : ''}
+          ${horasDobles  ? tr('Horas Extras',           '', horasDobles, false, false) : ''}
+          ${subsidio     ? tr('Subsidio Incapacidad',   '', subsidio,    false, false) : ''}
+          ${tr('Total Beneficios', '', totalBenef, true, false)}
+        </tbody>
+      </table>
+
+      <div class="section-title">Deducciones</div>
+      <table class="detail-table">
+        <tbody>
+          ${ccss    ? tr('CCSS 10,67%',         '', ccss,    false, true) : ''}
+          ${renta   ? tr('Impuesto de renta',   '', renta,   false, true) : ''}
+          ${pension ? tr('Pensión Voluntaria',  '', pension, false, true) : ''}
+          ${cxc     ? tr('CxC',                 '', cxc,     false, true) : ''}
+          ${tr('Total Deducciones', '', totalRebaj, true, true)}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <table class="detail-table" style="margin-top:8px">
+    <tr class="neto-row">
+      <td>Neto a Pagar</td><td></td><td style="text-align:right">₡ ${fmt(neto)}</td>
+    </tr>
+  </table>
+
+  <footer>Lean Consulting S.A. &nbsp;·&nbsp; Portal de Recursos Humanos &nbsp;·&nbsp; Generado el ${new Date().toLocaleDateString('es-CR')}</footer>
+  <script>window.onload=()=>window.print()<\/script>
+  </body></html>`);
+  w.document.close();
 }
