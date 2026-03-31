@@ -6,8 +6,6 @@
 <title>Portal RRHH — Lean Consulting</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="portal-rrhh.css?v=1773441976"/>
-<!-- SheetJS para lectura de Excel en comprobantes -->
-<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -313,7 +311,7 @@
       <button class="tab-btn active" onclick="showAdminTab('solicitudes',this)">Solicitudes</button>
       <button class="tab-btn"        onclick="showAdminTab('expedientes',this)">Expedientes</button>
       <button class="tab-btn"        onclick="showAdminTab('colaboradores',this);loadColabTab()">Colaboradores</button>
-      <button class="tab-btn"        onclick="showAdminTab('comprobantes',this)">Comprobantes</button>
+      <button class="tab-btn"        onclick="showAdminTab('comprobantes',this);loadCompColabSelector();loadCompAdminHistory()">Comprobantes</button>
     </div>
 
     <!-- Admin: Solicitudes -->
@@ -433,49 +431,44 @@
     <div class="tab-panel" id="admin-tab-comprobantes">
       <div class="card">
         <h2 class="card-title">Comprobantes de Pago</h2>
-        <p class="card-sub">Suba el Excel de planilla — el sistema extrae y envía el comprobante a cada colaborador por correo</p>
+        <p class="card-sub">Seleccione el colaborador, adjunte el PDF del comprobante y envíe por correo</p>
 
         <div class="info-box">
-          <strong>Formato esperado del Excel:</strong> Cedula · Nombre · Email · Salario Bruto · Deducción CCSS · Deducción Renta · Otras Deducciones · Salario Neto · Observaciones<br/>
-          El período de pago se selecciona antes de enviar. Se genera un correo personalizado por cada colaborador.
+          El período se calcula automáticamente como el mes anterior al envío. El correo llega al email registrado en el expediente del colaborador con el PDF adjunto.
         </div>
 
-        <!-- Zona de carga -->
-        <div class="comp-upload-zone" id="compUploadZone"
-          onclick="document.getElementById('compFileInput').click()"
+        <!-- Selector colaborador + período -->
+        <div class="form-row" style="margin-bottom:16px">
+          <div class="fg">
+            <label for="compColabSelect">Colaborador</label>
+            <select id="compColabSelect">
+              <option value="">Seleccione un colaborador...</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label>Período de pago (automático)</label>
+            <input type="text" id="compPeriodoLabel" readonly
+              style="background:var(--b50);color:var(--b700);font-weight:600;cursor:default"/>
+          </div>
+        </div>
+
+        <!-- Zona de carga PDF -->
+        <div class="comp-upload-zone" id="compPDFZone"
+          onclick="document.getElementById('compPDFInput').click()"
           ondragover="event.preventDefault();this.classList.add('drag-over')"
           ondragleave="this.classList.remove('drag-over')"
-          ondrop="handleCompDrop(event)">
-          <div class="comp-upload-icon">↑</div>
-          <div class="comp-upload-title">Arrastrá el archivo aquí o hacé clic para seleccionar</div>
-          <div class="comp-upload-hint">Formatos aceptados: .xlsx, .xls, .csv<br/>El archivo debe tener encabezados en la primera fila</div>
-          <button class="btn-sec" style="pointer-events:none">Seleccionar archivo</button>
+          ondrop="handleCompPDFDrop(event)">
+          <div class="comp-upload-icon" style="font-size:13px;font-weight:700;letter-spacing:1px">PDF</div>
+          <div class="comp-upload-title" id="compPDFName">Arrastrá el comprobante PDF aquí o hacé clic para seleccionar</div>
+          <div class="comp-upload-hint">Solo archivos .pdf</div>
+          <button class="btn-sec" style="pointer-events:none;margin-top:8px">Seleccionar PDF</button>
         </div>
-        <input type="file" id="compFileInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="parseVoucherFile(this.files[0])"/>
+        <input type="file" id="compPDFInput" accept=".pdf" style="display:none"
+          onchange="selectCompPDF(this.files[0])"/>
 
-        <!-- Vista previa (aparece al cargar) -->
-        <div id="compPreviewSection" style="display:none">
-          <div class="comp-preview-header">
-            <span class="comp-preview-title">Vista previa del archivo</span>
-            <span class="comp-count" id="compRowCount">0 colaboradores</span>
-          </div>
-          <div class="comp-table-wrap">
-            <table class="comp-table" id="compPreviewTable"></table>
-          </div>
-          <div class="form-row" style="margin-bottom:16px">
-            <div class="fg">
-              <label>Período de pago</label>
-              <input type="month" id="compPeriodo"/>
-            </div>
-            <div class="fg">
-              <label>Descripción adicional (opcional)</label>
-              <input type="text" id="compDesc" placeholder="Ej: Planilla ordinaria marzo 2026"/>
-            </div>
-          </div>
-          <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
-            <button class="btn-sec" onclick="resetCompUpload()">Cancelar</button>
-            <button class="btn-cyan" onclick="sendVouchers()">Enviar comprobantes por correo</button>
-          </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:16px">
+          <button class="btn-sec" onclick="resetCompPDF()">Limpiar</button>
+          <button class="btn-cyan" onclick="sendComprobantePDF()">Enviar por correo</button>
         </div>
 
         <!-- Historial de envíos -->

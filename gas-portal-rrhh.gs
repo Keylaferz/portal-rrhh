@@ -132,6 +132,17 @@ function jsonOut(payload) {
 //  ENTRY POINT
 // ══════════════════════════════════════════════════════════════════
 
+function doPost(e) {
+  try {
+    const body   = JSON.parse(e.postData.contents || '{}');
+    const action = body.action || '';
+    if (action === 'sendComprobantePDF') return jsonOut(sendComprobantePDF(body));
+    return jsonOut(err('Acción POST no reconocida: ' + action));
+  } catch(ex) {
+    return jsonOut(err(ex.toString()));
+  }
+}
+
 function doGet(e) {
   try {
     const p      = e.parameter || {};
@@ -459,6 +470,90 @@ function saveComprobante(p) {
   }
 
   return ok({ id, emailTo });
+}
+
+function sendComprobantePDF(p) {
+  ensureComprobantesSheet();
+
+  const cedula = String(p.cedula || '').trim();
+  if (!cedula) return err('Cédula requerida');
+
+  // Buscar colaborador en Empleados
+  const empRows = sheetToObjects(SHEET.empleados);
+  const emp     = empRows.find(r => String(r.cedula).trim() === cedula);
+  if (!emp) return err('Colaborador no encontrado: ' + cedula);
+
+  const emailTo = emp.emailcorp || emp.email || '';
+  if (!emailTo || !emailTo.includes('@')) return err('El colaborador no tiene correo registrado en su expediente');
+
+  const nombre = emp.nombre || p.nombre || '';
+  const primerNombre = nombre.split(' ')[0] || nombre;
+
+  // Período: se usa el enviado desde el cliente (ya calculado como mes anterior)
+  const meses = ['enero','febrero','marzo','abril','mayo','junio',
+                 'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  var periodoLabel = p.periodoLabel || '';
+  var periodo      = p.periodo      || '';
+  if (!periodoLabel) {
+    var now  = new Date();
+    var prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    periodoLabel = meses[prev.getMonth()] + ' ' + prev.getFullYear();
+    periodo      = prev.getFullYear() + '-' + String(prev.getMonth()+1).padStart(2,'0');
+  }
+
+  // Decodificar PDF
+  var pdfBytes = Utilities.base64Decode(p.pdfBase64);
+  var pdfBlob  = Utilities.newBlob(pdfBytes, 'application/pdf',
+                   p.pdfName || ('Comprobante_' + periodo + '.pdf'));
+
+  // Cuerpo del correo
+  var bodyText =
+    'Estimado/a ' + primerNombre + ',\n\n' +
+    'Esperamos que se encuentre bien.\n\n' +
+    'Adjunto encontrará el comprobante de pago correspondiente al periodo de ' + periodoLabel + ', ' +
+    'el cual ya ha sido procesado. Les recordamos que cualquier consulta sobre el detalle de su pago ' +
+    'puede hacerla llegar a mi persona o bien a Cristián.\n\n' +
+    'Si requiere alguna actualización en su información o tienen dudas sobre deducciones, horas extras ' +
+    'o cualquier otro concepto, por favor no duden en contactarnos.\n\n' +
+    'Saludos,\n' +
+    'RRHH — ' + EMPRESA_NOMBRE;
+
+  var asunto = '[RRHH] Comprobante de pago — ' + periodoLabel + ' — ' + EMPRESA_NOMBRE;
+
+  try {
+    GmailApp.sendEmail(emailTo, asunto, bodyText, {
+      attachments: [pdfBlob],
+      name: EMPRESA_NOMBRE + ' — RRHH',
+    });
+    // CC a RRHH
+    RRHH_EMAILS.forEach(function(addr) {
+      if (addr && addr.includes('@') && addr !== emailTo) {
+        GmailApp.sendEmail(addr, '[CC] ' + asunto, bodyText, {
+          attachments: [pdfBlob],
+          name: EMPRESA_NOMBRE + ' — RRHH',
+        });
+      }
+    });
+  } catch(ex) {
+    Logger.log('Error enviando PDF a ' + emailTo + ': ' + ex.toString());
+    return err('Error al enviar correo: ' + ex.toString());
+  }
+
+  // Guardar registro en Comprobantes
+  var sh      = getSheet(SHEET.comprobantes);
+  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  var id       = 'COMP-' + Date.now().toString(36).toUpperCase().slice(-6);
+  var fechaEnv = new Date().toLocaleDateString('es-CR');
+
+  var dataObj = {
+    id: id, cedula: cedula, nombre: nombre, emailcorp: emailTo,
+    puesto: emp.puesto || '', periodo: periodo,
+    periodo_label: periodoLabel, descripcion: 'Comprobante PDF',
+    fecha_envio: fechaEnv,
+  };
+  sh.appendRow(headers.map(function(h) { return dataObj[h] !== undefined ? dataObj[h] : ''; }));
+
+  return ok({ id: id, emailTo: emailTo });
 }
 
 function ensureComprobantesSheet() {

@@ -746,6 +746,18 @@ async function callGAS(params, silent=false){
   }
 }
 
+// ── POST para envío de PDF (sin límite de URL) ──
+async function callGASPost(body) {
+  if (!GAS_URL || GAS_URL === 'PEGUE_SU_URL_GAS_AQUI') return null;
+  document.getElementById('sendingOverlay').classList.add('active');
+  try {
+    const res  = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(body) });
+    const text = await res.text();
+    try { return JSON.parse(text); } catch { return null; }
+  } catch { return null; }
+  finally { document.getElementById('sendingOverlay').classList.remove('active'); }
+}
+
 // ══════════════════════════════
 // EDITAR / CANCELAR
 // ══════════════════════════════
@@ -1699,194 +1711,101 @@ document.addEventListener('DOMContentLoaded', () => {
 // ══════════════════════════════════════════════════════
 
 // ── Estado local ──
-let comprobantesData   = [];   // filas parseadas del Excel
+let compPDFFile        = null; // PDF seleccionado por el admin
 let misComprobantes    = [];   // comprobantes del colaborador actual
 let currentComprobante = null; // para modal de detalle
 
-// ── Columnas del Excel de planilla (case-insensitive, sin tildes) ──
-const COMP_COL_MAP = {
-  nombre:          ['empleado','nombre','colaborador'],
-  cedula:          ['cedula','cédula','identificacion'],
-  puesto:          ['puesto','cargo','posicion'],
-  fechaIngreso:    ['fecha ingreso','fecha de ingreso'],
-  diasTrabajados:  ['dias trabajados','días trabajados'],
-  salarioMes:      ['salario mes','salario del mes'],
-  bono:            ['bono'],
-  horasDobles:     ['tiempo doble','horas dobles'],
-  subsidio:        ['subsidio incapacidad','subsidio'],
-  totalBeneficios: ['total beneficios salariales','total beneficios'],
-  pension:         ['pension voluntaria','pension','pensión voluntaria'],
-  ccss:            ['ccss'],
-  renta:           ['renta','impuesto de renta','impuesto renta'],
-  cxc:             ['cxc','cx c','embargos'],
-  totalRebajos:    ['total rebajos','total deducciones'],
-  neto:            ['salario neto a transferir','salario neto','neto'],
-};
-
-function _normHeader(h) {
-  return String(h).toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .replace(/\s+/g,' ').trim();
+// ── Período automático: mes anterior al envío ──
+function getAutoPeriodo() {
+  const now  = new Date();
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const meses = ['enero','febrero','marzo','abril','mayo','junio',
+                 'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  return {
+    label: meses[prev.getMonth()] + ' ' + prev.getFullYear(),
+    value: `${prev.getFullYear()}-${String(prev.getMonth()+1).padStart(2,'0')}`,
+  };
 }
 
-function _mapCompCol(headers) {
-  const map = {};
-  headers.forEach((h, i) => {
-    const norm = _normHeader(h);
-    for (const [key, aliases] of Object.entries(COMP_COL_MAP)) {
-      if (aliases.some(a => norm.includes(a))) map[key] = i;
-    }
-  });
-  return map;
+// ── Cargar selector de colaboradores ──
+function loadCompColabSelector() {
+  const sel = document.getElementById('compColabSelect');
+  if (!sel) return;
+  const lista = (empleados || []).filter(e => e.acceso !== 'inactivo');
+  sel.innerHTML = '<option value="">Seleccione un colaborador...</option>' +
+    lista.map(e => `<option value="${escHTML(e.cedula)}">${escHTML(e.nombre)}</option>`).join('');
+  const periodo = getAutoPeriodo();
+  const lbl = document.getElementById('compPeriodoLabel');
+  if (lbl) lbl.value = periodo.label.charAt(0).toUpperCase() + periodo.label.slice(1);
 }
 
-// ── Drag & Drop ──
-function handleCompDrop(event) {
+// ── Drag & Drop PDF ──
+function handleCompPDFDrop(event) {
   event.preventDefault();
-  document.getElementById('compUploadZone').classList.remove('drag-over');
+  document.getElementById('compPDFZone').classList.remove('drag-over');
   const file = event.dataTransfer.files[0];
-  if (file) parseVoucherFile(file);
+  if (file) selectCompPDF(file);
 }
 
-// ── Parseo de Excel / CSV ──
-function parseVoucherFile(file) {
-  if (!file) return;
-  if (!window.XLSX) {
-    toast('Librería no disponible', 'Recargue la página e intente de nuevo','error');
+function selectCompPDF(file) {
+  if (!file || file.type !== 'application/pdf') {
+    toast('Formato inválido', 'Solo se aceptan archivos .pdf', 'error');
     return;
   }
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const wb  = XLSX.read(e.target.result, { type: 'binary' });
-      const ws  = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
-      if (rows.length < 2) { toast('Archivo vacío','El archivo no contiene datos','warning'); return; }
-
-      const headers = rows[0];
-      const colMap  = _mapCompCol(headers);
-
-      comprobantesData = rows.slice(1)
-        .filter(r => r.some(c => c !== '' && c !== null && c !== undefined))
-        .map(r => ({
-          nombre:          String(r[colMap.nombre]         ?? ''),
-          cedula:          String(r[colMap.cedula]         ?? '').replace(/[-.\s]/g,''),
-          puesto:          String(r[colMap.puesto]         ?? ''),
-          fechaIngreso:    String(r[colMap.fechaIngreso]   ?? ''),
-          diasTrabajados:  parseFloat(r[colMap.diasTrabajados])  || 0,
-          salarioMes:      parseFloat(r[colMap.salarioMes])      || 0,
-          bono:            parseFloat(r[colMap.bono])             || 0,
-          horasDobles:     parseFloat(r[colMap.horasDobles])      || 0,
-          subsidio:        parseFloat(r[colMap.subsidio])         || 0,
-          totalBeneficios: parseFloat(r[colMap.totalBeneficios])  || 0,
-          pension:         parseFloat(r[colMap.pension])          || 0,
-          ccss:            parseFloat(r[colMap.ccss])             || 0,
-          renta:           parseFloat(r[colMap.renta])            || 0,
-          cxc:             parseFloat(r[colMap.cxc])              || 0,
-          totalRebajos:    parseFloat(r[colMap.totalRebajos])     || 0,
-          neto:            parseFloat(r[colMap.neto])             || 0,
-        }))
-        .filter(r => r.cedula || r.nombre);
-
-      if (comprobantesData.length === 0) {
-        toast('Sin datos válidos', 'Verifique que el archivo tenga las columnas correctas','warning');
-        return;
-      }
-      renderCompPreview();
-    } catch(err) {
-      toast('Error al leer archivo','Verifique que el formato sea .xlsx, .xls o .csv','error');
-    }
-  };
-  reader.readAsBinaryString(file);
+  compPDFFile = file;
+  document.getElementById('compPDFName').textContent = file.name;
+  const zone = document.getElementById('compPDFZone');
+  zone.style.borderColor = 'var(--b500)';
+  zone.style.background  = 'var(--cyan-l)';
 }
 
-function renderCompPreview() {
-  document.getElementById('compUploadZone').style.display = 'none';
-  document.getElementById('compPreviewSection').style.display = 'block';
-  document.getElementById('compRowCount').textContent = comprobantesData.length + ' colaboradores';
-
-  // Mes actual como valor por defecto
-  const hoy = new Date();
-  document.getElementById('compPeriodo').value = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
-
-  const thead = `<thead><tr>
-    <th>Nombre</th><th>Cédula</th><th>Puesto</th>
-    <th>Días Trab.</th><th>Sal. Mes (₡)</th><th>Bono (₡)</th>
-    <th>Total Benef. (₡)</th><th>Total Rebaj. (₡)</th><th>Neto (₡)</th>
-  </tr></thead>`;
-  const tbody = '<tbody>' + comprobantesData.map(r => `<tr>
-    <td>${escHTML(r.nombre)}</td>
-    <td>${escHTML(r.cedula)}</td>
-    <td>${escHTML(r.puesto)}</td>
-    <td style="text-align:center">${r.diasTrabajados || '—'}</td>
-    <td>${r.salarioMes.toLocaleString('es-CR')}</td>
-    <td>${r.bono ? r.bono.toLocaleString('es-CR') : '—'}</td>
-    <td>${r.totalBeneficios.toLocaleString('es-CR')}</td>
-    <td>${r.totalRebajos.toLocaleString('es-CR')}</td>
-    <td><strong>${r.neto.toLocaleString('es-CR')}</strong></td>
-  </tr>`).join('') + '</tbody>';
-
-  document.getElementById('compPreviewTable').innerHTML = thead + tbody;
+function resetCompPDF() {
+  compPDFFile = null;
+  const inp = document.getElementById('compPDFInput');
+  if (inp) inp.value = '';
+  document.getElementById('compPDFName').textContent = 'Arrastrá el comprobante PDF aquí o hacé clic para seleccionar';
+  const zone = document.getElementById('compPDFZone');
+  zone.style.borderColor = '';
+  zone.style.background  = '';
 }
 
-function resetCompUpload() {
-  comprobantesData = [];
-  document.getElementById('compFileInput').value = '';
-  document.getElementById('compUploadZone').style.display = 'block';
-  document.getElementById('compPreviewSection').style.display = 'none';
-  document.getElementById('compPreviewTable').innerHTML = '';
-}
+// ── Enviar comprobante PDF ──
+async function sendComprobantePDF() {
+  const cedula = document.getElementById('compColabSelect')?.value;
+  if (!cedula)      { toast('Colaborador requerido', 'Seleccione un colaborador', 'warning'); return; }
+  if (!compPDFFile) { toast('PDF requerido', 'Seleccione el PDF del comprobante', 'warning'); return; }
 
-// ── Enviar comprobantes ──
-async function sendVouchers() {
-  const periodo = document.getElementById('compPeriodo').value;
-  if (!periodo) { toast('Período requerido','Seleccione el período de pago antes de enviar','warning'); return; }
-  if (comprobantesData.length === 0) { toast('Sin datos','No hay comprobantes para enviar','warning'); return; }
+  const periodo = getAutoPeriodo();
 
-  const [yr, mo] = periodo.split('-');
-  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  const periodoLabel = `${meses[parseInt(mo)-1]} ${yr}`;
-  const desc = document.getElementById('compDesc').value || `Planilla ordinaria ${periodoLabel}`;
+  const pdfBase64 = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = e => resolve(e.target.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(compPDFFile);
+  });
 
-  showOverlay(`Enviando ${comprobantesData.length} comprobantes...`);
+  const emp = (empleados || []).find(e => e.cedula === cedula);
+  showOverlay('Enviando comprobante...');
 
-  let ok = 0, err = 0;
-  for (const row of comprobantesData) {
-    try {
-      const res = await callGAS({
-        action:         'saveComprobante',
-        cedula:         row.cedula,
-        nombre:         row.nombre,
-        puesto:         row.puesto,
-        fechaIngreso:   row.fechaIngreso,
-        periodo,
-        periodoLabel,
-        descripcion:    desc,
-        diasTrabajados: row.diasTrabajados,
-        salarioMes:     row.salarioMes,
-        bono:           row.bono,
-        horasDobles:    row.horasDobles,
-        subsidio:       row.subsidio,
-        totalBeneficios:row.totalBeneficios,
-        pension:        row.pension,
-        ccss:           row.ccss,
-        renta:          row.renta,
-        cxc:            row.cxc,
-        totalRebajos:   row.totalRebajos,
-        salarioNeto:    row.neto,
-      });
-      if (res && res.ok) ok++; else err++;
-    } catch(_) { err++; }
-  }
+  const res = await callGASPost({
+    action:       'sendComprobantePDF',
+    cedula,
+    nombre:       emp?.nombre || '',
+    periodo:      periodo.value,
+    periodoLabel: periodo.label,
+    pdfBase64,
+    pdfName:      compPDFFile.name,
+  });
 
   hideOverlay();
-  resetCompUpload();
-  loadCompAdminHistory();
 
-  if (err === 0) {
-    toast('Comprobantes enviados', `${ok} correos enviados correctamente para ${periodoLabel}`, 'success');
+  if (res && res.ok) {
+    toast('Comprobante enviado', `Correo enviado a ${escHTML(res.emailTo || emp?.nombre || cedula)}`, 'success');
+    resetCompPDF();
+    document.getElementById('compColabSelect').value = '';
+    loadCompAdminHistory();
   } else {
-    toast('Envío parcial', `${ok} enviados, ${err} fallidos — revise los correos del sheet`, 'warning');
+    toast('Error al enviar', res?.error || 'Verifique que el colaborador tenga correo en su expediente', 'error');
   }
 }
 
