@@ -394,8 +394,18 @@ function saveExpediente(p) {
 // ══════════════════════════════════════════════════════════════════
 
 function saveComprobante(p) {
-  // 1. Asegurar que la hoja Comprobantes existe con sus headers
   ensureComprobantesSheet();
+
+  // Buscar email del colaborador en la hoja Empleados por cédula
+  const cedula = String(p.cedula || '').trim();
+  let emailTo  = '';
+  if (cedula) {
+    const empRows = sheetToObjects(SHEET.empleados);
+    const emp     = empRows.find(r => String(r.cedula).trim() === cedula);
+    if (emp) {
+      emailTo = emp.emailcorp || emp.email || '';
+    }
+  }
 
   const sh      = getSheet(SHEET.comprobantes);
   const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
@@ -405,38 +415,42 @@ function saveComprobante(p) {
 
   const dataObj = {
     id,
-    cedula:           p.cedula          || '',
-    nombre:           p.nombre          || '',
-    emailcorp:        p.email           || '',
-    periodo:          p.periodo         || '',
-    periodoLabel:     p.periodoLabel    || '',
-    descripcion:      p.descripcion     || '',
-    salario_bruto:    p.salarioBruto    || 0,
-    ccss_empleado:    p.ccssEmpleado    || 0,
-    renta:            p.renta           || 0,
-    otras_deduc:      p.otrasDeduc      || 0,
-    salario_neto:     p.salarioNeto     || 0,
-    observaciones:    p.observaciones   || '',
+    cedula,
+    nombre:             p.nombre           || '',
+    emailcorp:          emailTo,
+    puesto:             p.puesto           || '',
+    fecha_ingreso:      p.fechaIngreso     || '',
+    periodo:            p.periodo          || '',
+    periodo_label:      p.periodoLabel     || '',
+    descripcion:        p.descripcion      || '',
+    dias_trabajados:    parseFloat(p.diasTrabajados)  || 0,
+    salario_mes:        parseFloat(p.salarioMes)      || 0,
+    bono:               parseFloat(p.bono)             || 0,
+    horas_dobles:       parseFloat(p.horasDobles)      || 0,
+    subsidio:           parseFloat(p.subsidio)         || 0,
+    total_beneficios:   parseFloat(p.totalBeneficios)  || 0,
+    pension_voluntaria: parseFloat(p.pension)          || 0,
+    ccss:               parseFloat(p.ccss)             || 0,
+    renta:              parseFloat(p.renta)            || 0,
+    cxc:                parseFloat(p.cxc)              || 0,
+    total_rebajos:      parseFloat(p.totalRebajos)     || 0,
+    salario_neto:       parseFloat(p.salarioNeto)      || 0,
     fecha_envio,
   };
 
   const row = headers.map(h => dataObj[h] !== undefined ? dataObj[h] : '');
   sh.appendRow(row);
 
-  // 2. Enviar correo al colaborador
-  const emailTo = p.email || '';
+  // Enviar correo al colaborador
   if (emailTo && emailTo.includes('@')) {
     try {
       const asunto = `[RRHH] Comprobante de pago — ${p.periodoLabel || p.periodo} — ${EMPRESA_NOMBRE}`;
-      const html   = buildComprobanteEmail(dataObj, p);
+      const html   = buildComprobanteEmail(dataObj);
       GmailApp.sendEmail(emailTo, asunto, '', { htmlBody: html });
-
-      // CC a RRHH si está configurado
       if (RRHH_EMAILS.length > 0) {
         RRHH_EMAILS.forEach(addr => {
-          if (addr && addr.includes('@')) {
+          if (addr && addr.includes('@'))
             GmailApp.sendEmail(addr, '[CC] ' + asunto, '', { htmlBody: html });
-          }
         });
       }
     } catch (ex) {
@@ -444,104 +458,125 @@ function saveComprobante(p) {
     }
   }
 
-  return ok({ id });
+  return ok({ id, emailTo });
 }
 
 function ensureComprobantesSheet() {
   const sh = getSheet(SHEET.comprobantes);
   if (sh.getLastRow() === 0) {
     sh.appendRow([
-      'id','cedula','nombre','emailcorp','periodo','periodoLabel',
-      'descripcion','salario_bruto','ccss_empleado','renta',
-      'otras_deduc','salario_neto','observaciones','fecha_envio'
+      'id','cedula','nombre','emailcorp','puesto','fecha_ingreso',
+      'periodo','periodo_label','descripcion',
+      'dias_trabajados','salario_mes','bono','horas_dobles','subsidio',
+      'total_beneficios','pension_voluntaria','ccss','renta','cxc',
+      'total_rebajos','salario_neto','fecha_envio'
     ]);
   }
 }
 
-function buildComprobanteEmail(data, p) {
-  const bruto  = parseFloat(data.salario_bruto)  || 0;
-  const ccss   = parseFloat(data.ccss_empleado)  || 0;
-  const renta  = parseFloat(data.renta)          || 0;
-  const otras  = parseFloat(data.otras_deduc)    || 0;
-  const neto   = parseFloat(data.salario_neto)   || 0;
-  const total_deduc = ccss + renta + otras;
-
+function buildComprobanteEmail(data) {
   function fmtCRC(n) {
-    return '₡ ' + parseFloat(n).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    return '&#8353; ' + (parseFloat(n)||0).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+  function erow(label, dias, monto, bold, red) {
+    var style = 'padding:7px 12px;font-size:12px;border-bottom:1px solid #E2E8F0;' + (red ? 'color:#CC0000;' : '');
+    var wt    = bold ? 'font-weight:700;' : '';
+    return '<tr>' +
+      '<td style="' + style + wt + '">' + label + '</td>' +
+      '<td style="' + style + 'text-align:center">' + (dias || '') + '</td>' +
+      '<td style="' + style + wt + 'text-align:right">' + (monto ? fmtCRC(monto) : '') + '</td>' +
+      '</tr>';
   }
 
-  return `<!DOCTYPE html>
-<html><head><meta charset="UTF-8"/></head>
-<body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#F4F9FF">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#F4F9FF;padding:32px 0">
-  <tr><td align="center">
-    <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(21,101,192,.12)">
-      <!-- Header -->
-      <tr><td style="background:linear-gradient(135deg,#052960,#1565C0);padding:28px 32px">
-        <div style="font-family:'Georgia',serif;font-size:22px;color:#ffffff;margin-bottom:4px">${EMPRESA_NOMBRE}</div>
-        <div style="font-size:12px;color:#ADDCFF;letter-spacing:1px">COMPROBANTE DE PAGO</div>
-      </td></tr>
-      <!-- Período badge -->
-      <tr><td style="padding:24px 32px 0">
-        <div style="display:inline-block;background:#E0F7FA;color:#0096C7;border:1px solid #B3E5F5;padding:6px 16px;border-radius:20px;font-size:13px;font-weight:700">
-          ${data.periodoLabel || data.periodo}
-        </div>
-      </td></tr>
-      <!-- Colaborador -->
-      <tr><td style="padding:16px 32px 0">
-        <div style="font-size:16px;font-weight:700;color:#052960">${data.nombre}</div>
-        <div style="font-size:12px;color:#94A3B8;margin-top:2px">Cédula: ${data.cedula} &nbsp;·&nbsp; ${data.descripcion || 'Planilla ordinaria'}</div>
-      </td></tr>
-      <!-- Tabla de montos -->
-      <tr><td style="padding:20px 32px 28px">
-        <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #E2E8F0;border-radius:8px;overflow:hidden">
-          <tr style="background:#EEF5FF">
-            <td style="padding:10px 16px;font-size:11px;font-weight:700;color:#1565C0;text-transform:uppercase;letter-spacing:.5px">Concepto</td>
-            <td style="padding:10px 16px;font-size:11px;font-weight:700;color:#1565C0;text-transform:uppercase;letter-spacing:.5px;text-align:right">Monto</td>
-          </tr>
-          <tr style="border-top:1px solid #E2E8F0">
-            <td style="padding:11px 16px;font-size:13px;color:#1E293B">Salario Bruto</td>
-            <td style="padding:11px 16px;font-size:13px;font-weight:600;color:#1E293B;text-align:right">${fmtCRC(bruto)}</td>
-          </tr>
-          <tr style="background:#FFF8F5;border-top:1px solid #E2E8F0">
-            <td style="padding:11px 16px;font-size:13px;color:#F97316">Deducción CCSS (empleado)</td>
-            <td style="padding:11px 16px;font-size:13px;font-weight:600;color:#F97316;text-align:right">- ${fmtCRC(ccss)}</td>
-          </tr>
-          <tr style="background:#FFF8F5;border-top:1px solid #E2E8F0">
-            <td style="padding:11px 16px;font-size:13px;color:#F97316">Deducción Renta</td>
-            <td style="padding:11px 16px;font-size:13px;font-weight:600;color:#F97316;text-align:right">- ${fmtCRC(renta)}</td>
-          </tr>
-          ${otras > 0 ? `
-          <tr style="background:#FFF8F5;border-top:1px solid #E2E8F0">
-            <td style="padding:11px 16px;font-size:13px;color:#F97316">Otras Deducciones</td>
-            <td style="padding:11px 16px;font-size:13px;font-weight:600;color:#F97316;text-align:right">- ${fmtCRC(otras)}</td>
-          </tr>` : ''}
-          <tr style="border-top:1px solid #E2E8F0">
-            <td style="padding:11px 16px;font-size:13px;color:#1E293B">Total Deducciones</td>
-            <td style="padding:11px 16px;font-size:13px;font-weight:600;color:#EF4444;text-align:right">- ${fmtCRC(total_deduc)}</td>
-          </tr>
-          <!-- Neto -->
-          <tr style="background:linear-gradient(135deg,#052960,#1565C0);border-top:2px solid #1565C0">
-            <td style="padding:14px 16px;font-size:15px;font-weight:700;color:#ffffff">Salario Neto a Depositar</td>
-            <td style="padding:14px 16px;font-size:19px;font-weight:700;color:#ffffff;text-align:right;font-family:'Georgia',serif">${fmtCRC(neto)}</td>
-          </tr>
-        </table>
-        ${data.observaciones ? `
-        <div style="margin-top:14px;font-size:12px;color:#475569;background:#F8FAFC;border-radius:8px;padding:10px 14px">
-          <strong>Observaciones:</strong> ${data.observaciones}
-        </div>` : ''}
-      </td></tr>
-      <!-- Footer -->
-      <tr><td style="background:#F8FAFC;padding:14px 32px;border-top:1px solid #E2E8F0;text-align:center">
-        <span style="font-size:11px;color:#94A3B8">
-          ${EMPRESA_NOMBRE} &nbsp;·&nbsp; Portal de Recursos Humanos<br/>
-          Este comprobante es generado automáticamente. Para consultas contacte a RRHH.
-        </span>
-      </td></tr>
-    </table>
-  </td></tr>
-</table>
-</body></html>`;
+  var diasTrab    = parseFloat(data.dias_trabajados)   || 0;
+  var salarioMes  = parseFloat(data.salario_mes)        || 0;
+  var bono        = parseFloat(data.bono)               || 0;
+  var horasDobles = parseFloat(data.horas_dobles)       || 0;
+  var subsidio    = parseFloat(data.subsidio)           || 0;
+  var totalBenef  = parseFloat(data.total_beneficios)   || (salarioMes + bono + horasDobles + subsidio);
+  var pension     = parseFloat(data.pension_voluntaria) || 0;
+  var ccss        = parseFloat(data.ccss)               || 0;
+  var renta       = parseFloat(data.renta)              || 0;
+  var cxc         = parseFloat(data.cxc)                || 0;
+  var totalRebaj  = parseFloat(data.total_rebajos)      || (pension + ccss + renta + cxc);
+  var neto        = parseFloat(data.salario_neto)       || 0;
+  var periodoLabel = data.periodo_label || data.periodo || '';
+
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>' +
+'<body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#F4F9FF">' +
+'<table width="100%" cellpadding="0" cellspacing="0" style="background:#F4F9FF;padding:28px 0">' +
+'<tr><td align="center">' +
+'<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 4px 16px rgba(21,101,192,.12)">' +
+
+'<!-- Header -->' +
+'<tr><td style="background:linear-gradient(135deg,#052960,#1565C0);padding:22px 28px">' +
+'<div style="font-size:24px;font-weight:900;color:#fff;letter-spacing:-1px;line-height:1.1">LEAN</div>' +
+'<div style="font-size:13px;font-weight:900;color:#fff;letter-spacing:1px">CONSULTING</div>' +
+'<div style="font-size:9px;color:#ADDCFF;letter-spacing:2px;margin-top:1px">PROJECT MANAGEMENT</div>' +
+'<div style="border-top:1px solid rgba(255,255,255,.3);margin:10px 0 8px"></div>' +
+'<div style="font-size:14px;color:#ADDCFF;letter-spacing:.5px">COMPROBANTE DE PAGO DE PLANILLA</div>' +
+'</td></tr>' +
+
+'<!-- Período -->' +
+'<tr><td style="padding:18px 28px 0">' +
+'<div style="display:inline-block;background:#E0F7FA;color:#0096C7;border:1px solid #B3E5F5;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700">' + periodoLabel + '</div>' +
+'</td></tr>' +
+
+'<!-- Info colaborador -->' +
+'<tr><td style="padding:14px 28px 0">' +
+'<table width="100%" cellpadding="0" cellspacing="0">' +
+'<tr><td style="font-size:12px;color:#1565C0;font-weight:600;padding:3px 0;width:130px">Nombre:</td><td style="font-size:12px;padding:3px 0">' + data.nombre + '</td></tr>' +
+'<tr><td style="font-size:12px;color:#1565C0;font-weight:600;padding:3px 0">Identificacion</td><td style="font-size:12px;padding:3px 0">' + data.cedula + '</td></tr>' +
+(data.puesto ? '<tr><td style="font-size:12px;color:#1565C0;font-weight:600;padding:3px 0">Puesto</td><td style="font-size:12px;padding:3px 0">' + data.puesto + '</td></tr>' : '') +
+(data.fecha_ingreso ? '<tr><td style="font-size:12px;color:#1565C0;font-weight:600;padding:3px 0">Fecha de Ingreso</td><td style="font-size:12px;padding:3px 0">' + data.fecha_ingreso + '</td></tr>' : '') +
+'</table>' +
+'</td></tr>' +
+
+'<!-- Detalle -->' +
+'<tr><td style="padding:16px 28px 24px">' +
+'<div style="border:1px solid #E2E8F0;border-radius:8px;overflow:hidden">' +
+'<div style="background:#F8FAFC;padding:8px 12px;font-weight:700;font-size:13px;border-bottom:1px solid #E2E8F0">Detalle de Salario</div>' +
+'<div style="padding:12px">' +
+
+'<div style="font-style:italic;font-weight:700;font-size:12px;margin-bottom:4px">Beneficios</div>' +
+'<table width="100%" cellpadding="0" cellspacing="0">' +
+'<tr><th style="font-size:10px;text-align:left;padding:4px 12px;background:#f0f0f0;border-bottom:1px solid #ddd"></th>' +
+'<th style="font-size:10px;text-align:center;padding:4px 12px;background:#f0f0f0;border-bottom:1px solid #ddd">Dias trabajados</th>' +
+'<th style="font-size:10px;text-align:right;padding:4px 12px;background:#f0f0f0;border-bottom:1px solid #ddd"></th></tr>' +
+erow('Salario Mes', diasTrab, salarioMes, false, false) +
+(bono        ? erow('Bono',               '', bono,        false, false) : '') +
+(horasDobles ? erow('Horas Extras',       '', horasDobles, false, false) : '') +
+(subsidio    ? erow('Subsidio Incapacidad','',subsidio,    false, false) : '') +
+erow('Total Beneficios', '', totalBenef, true, false) +
+'</table>' +
+
+'<div style="font-style:italic;font-weight:700;font-size:12px;margin:10px 0 4px">Deducciones</div>' +
+'<table width="100%" cellpadding="0" cellspacing="0">' +
+(ccss    ? erow('CCSS 10,67%',       '', ccss,    false, true) : '') +
+(renta   ? erow('Impuesto de renta', '', renta,   false, true) : '') +
+(pension ? erow('Pension Voluntaria','', pension, false, true) : '') +
+(cxc     ? erow('CxC',              '', cxc,     false, true) : '') +
+erow('Total Deducciones', '', totalRebaj, true, true) +
+'</table>' +
+
+'</div></div>' +
+
+'<!-- Neto -->' +
+'<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px">' +
+'<tr style="background:linear-gradient(135deg,#052960,#1565C0)">' +
+'<td style="padding:12px 16px;font-size:14px;font-weight:700;color:#fff">Neto a Pagar</td>' +
+'<td></td>' +
+'<td style="padding:12px 16px;font-size:18px;font-weight:700;color:#fff;text-align:right">' + fmtCRC(neto) + '</td>' +
+'</tr></table>' +
+
+'</td></tr>' +
+
+'<!-- Footer -->' +
+'<tr><td style="background:#F8FAFC;padding:12px 28px;border-top:1px solid #E2E8F0;text-align:center">' +
+'<span style="font-size:10px;color:#94A3B8">' + EMPRESA_NOMBRE + ' &nbsp;·&nbsp; Portal de Recursos Humanos<br/>Este comprobante es generado automaticamente. Para consultas contacte a RRHH.</span>' +
+'</td></tr>' +
+
+'</table></td></tr></table></body></html>';
 }
 
 function getComprobantes(p) {

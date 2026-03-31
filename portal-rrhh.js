@@ -1703,17 +1703,24 @@ let comprobantesData   = [];   // filas parseadas del Excel
 let misComprobantes    = [];   // comprobantes del colaborador actual
 let currentComprobante = null; // para modal de detalle
 
-// ── Nombres de columnas esperadas (case-insensitive, sin tildes) ──
+// ── Columnas del Excel de planilla (case-insensitive, sin tildes) ──
 const COMP_COL_MAP = {
-  cedula:     ['cedula','cédula','id','identificacion'],
-  nombre:     ['nombre','colaborador','empleado'],
-  email:      ['email','correo','emailcorp','e-mail'],
-  bruto:      ['salario bruto','bruto','salariobruto'],
-  ccss:       ['ccss','ccss empleado','deduccion ccss','deducciónccss'],
-  renta:      ['renta','deduccion renta','deducción renta'],
-  otras:      ['otras','otras deducciones','otrosdescuentos'],
-  neto:       ['salario neto','neto','salarioneto'],
-  obs:        ['observaciones','notas','obs'],
+  nombre:          ['empleado','nombre','colaborador'],
+  cedula:          ['cedula','cédula','identificacion'],
+  puesto:          ['puesto','cargo','posicion'],
+  fechaIngreso:    ['fecha ingreso','fecha de ingreso'],
+  diasTrabajados:  ['dias trabajados','días trabajados'],
+  salarioMes:      ['salario mes','salario del mes'],
+  bono:            ['bono'],
+  horasDobles:     ['tiempo doble','horas dobles'],
+  subsidio:        ['subsidio incapacidad','subsidio'],
+  totalBeneficios: ['total beneficios salariales','total beneficios'],
+  pension:         ['pension voluntaria','pension','pensión voluntaria'],
+  ccss:            ['ccss'],
+  renta:           ['renta','impuesto de renta','impuesto renta'],
+  cxc:             ['cxc','cx c','embargos'],
+  totalRebajos:    ['total rebajos','total deducciones'],
+  neto:            ['salario neto a transferir','salario neto','neto'],
 };
 
 function _normHeader(h) {
@@ -1762,15 +1769,22 @@ function parseVoucherFile(file) {
       comprobantesData = rows.slice(1)
         .filter(r => r.some(c => c !== '' && c !== null && c !== undefined))
         .map(r => ({
-          cedula: String(r[colMap.cedula] ?? '').replace(/[-.\s]/g,''),
-          nombre: String(r[colMap.nombre] ?? ''),
-          email:  String(r[colMap.email]  ?? ''),
-          bruto:  parseFloat(r[colMap.bruto])  || 0,
-          ccss:   parseFloat(r[colMap.ccss])   || 0,
-          renta:  parseFloat(r[colMap.renta])  || 0,
-          otras:  parseFloat(r[colMap.otras])  || 0,
-          neto:   parseFloat(r[colMap.neto])   || 0,
-          obs:    String(r[colMap.obs]  ?? ''),
+          nombre:          String(r[colMap.nombre]         ?? ''),
+          cedula:          String(r[colMap.cedula]         ?? '').replace(/[-.\s]/g,''),
+          puesto:          String(r[colMap.puesto]         ?? ''),
+          fechaIngreso:    String(r[colMap.fechaIngreso]   ?? ''),
+          diasTrabajados:  parseFloat(r[colMap.diasTrabajados])  || 0,
+          salarioMes:      parseFloat(r[colMap.salarioMes])      || 0,
+          bono:            parseFloat(r[colMap.bono])             || 0,
+          horasDobles:     parseFloat(r[colMap.horasDobles])      || 0,
+          subsidio:        parseFloat(r[colMap.subsidio])         || 0,
+          totalBeneficios: parseFloat(r[colMap.totalBeneficios])  || 0,
+          pension:         parseFloat(r[colMap.pension])          || 0,
+          ccss:            parseFloat(r[colMap.ccss])             || 0,
+          renta:           parseFloat(r[colMap.renta])            || 0,
+          cxc:             parseFloat(r[colMap.cxc])              || 0,
+          totalRebajos:    parseFloat(r[colMap.totalRebajos])     || 0,
+          neto:            parseFloat(r[colMap.neto])             || 0,
         }))
         .filter(r => r.cedula || r.nombre);
 
@@ -1796,17 +1810,19 @@ function renderCompPreview() {
   document.getElementById('compPeriodo').value = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
 
   const thead = `<thead><tr>
-    <th>Cédula</th><th>Nombre</th><th>Email</th>
-    <th>Bruto (₡)</th><th>CCSS</th><th>Renta</th><th>Otras</th><th>Neto (₡)</th>
+    <th>Nombre</th><th>Cédula</th><th>Puesto</th>
+    <th>Días Trab.</th><th>Sal. Mes (₡)</th><th>Bono (₡)</th>
+    <th>Total Benef. (₡)</th><th>Total Rebaj. (₡)</th><th>Neto (₡)</th>
   </tr></thead>`;
   const tbody = '<tbody>' + comprobantesData.map(r => `<tr>
-    <td>${escHTML(r.cedula)}</td>
     <td>${escHTML(r.nombre)}</td>
-    <td>${escHTML(r.email)}</td>
-    <td>${r.bruto.toLocaleString('es-CR')}</td>
-    <td>${r.ccss.toLocaleString('es-CR')}</td>
-    <td>${r.renta.toLocaleString('es-CR')}</td>
-    <td>${r.otras.toLocaleString('es-CR')}</td>
+    <td>${escHTML(r.cedula)}</td>
+    <td>${escHTML(r.puesto)}</td>
+    <td style="text-align:center">${r.diasTrabajados || '—'}</td>
+    <td>${r.salarioMes.toLocaleString('es-CR')}</td>
+    <td>${r.bono ? r.bono.toLocaleString('es-CR') : '—'}</td>
+    <td>${r.totalBeneficios.toLocaleString('es-CR')}</td>
+    <td>${r.totalRebajos.toLocaleString('es-CR')}</td>
     <td><strong>${r.neto.toLocaleString('es-CR')}</strong></td>
   </tr>`).join('') + '</tbody>';
 
@@ -1838,19 +1854,26 @@ async function sendVouchers() {
   for (const row of comprobantesData) {
     try {
       const res = await callGAS({
-        action:  'saveComprobante',
-        cedula:  row.cedula,
-        nombre:  row.nombre,
-        email:   row.email,
+        action:         'saveComprobante',
+        cedula:         row.cedula,
+        nombre:         row.nombre,
+        puesto:         row.puesto,
+        fechaIngreso:   row.fechaIngreso,
         periodo,
         periodoLabel,
-        descripcion:   desc,
-        salarioBruto:  row.bruto,
-        ccssEmpleado:  row.ccss,
-        renta:         row.renta,
-        otrasDeduc:    row.otras,
-        salarioNeto:   row.neto,
-        observaciones: row.obs,
+        descripcion:    desc,
+        diasTrabajados: row.diasTrabajados,
+        salarioMes:     row.salarioMes,
+        bono:           row.bono,
+        horasDobles:    row.horasDobles,
+        subsidio:       row.subsidio,
+        totalBeneficios:row.totalBeneficios,
+        pension:        row.pension,
+        ccss:           row.ccss,
+        renta:          row.renta,
+        cxc:            row.cxc,
+        totalRebajos:   row.totalRebajos,
+        salarioNeto:    row.neto,
       });
       if (res && res.ok) ok++; else err++;
     } catch(_) { err++; }
@@ -1970,70 +1993,183 @@ function openCompModal(idx) {
 
   document.getElementById('compModalTitle').textContent = `Comprobante — ${label}`;
 
-  const bruto  = parseFloat(c.salario_bruto  || c.salarioBruto  || 0);
-  const ccss   = parseFloat(c.ccss_empleado  || c.ccssEmpleado  || 0);
-  const renta  = parseFloat(c.renta          || 0);
-  const otras  = parseFloat(c.otras_deduc    || c.otrasDeduc    || 0);
-  const neto   = parseFloat(c.salario_neto   || c.salarioNeto   || 0);
-  const total_deduc = ccss + renta + otras;
+  const fmt = n => (parseFloat(n)||0).toLocaleString('es-CR');
+  const v   = k => parseFloat(c[k]) || 0;
+
+  const diasTrab      = v('dias_trabajados');
+  const salarioMes    = v('salario_mes');
+  const bono          = v('bono');
+  const horasDobles   = v('horas_dobles');
+  const subsidio      = v('subsidio');
+  const totalBenef    = v('total_beneficios') || (salarioMes + bono + horasDobles + subsidio);
+  const pension       = v('pension_voluntaria');
+  const ccss          = v('ccss');
+  const renta         = v('renta');
+  const cxc           = v('cxc');
+  const totalRebaj    = v('total_rebajos') || (pension + ccss + renta + cxc);
+  const neto          = v('salario_neto');
+
+  const detRow = (label, val, accent) => val ? `
+    <div class="comp-detail-row">
+      <span class="comp-detail-label">${label}</span>
+      <span class="comp-detail-val" ${accent?`style="color:var(--orange)"`:''}>${accent?'- ':''}₡ ${fmt(val)}</span>
+    </div>` : '';
 
   document.getElementById('compModalBody').innerHTML = `
-    <p style="font-size:12px;color:var(--g400);margin-bottom:16px">${escHTML(c.descripcion||'Planilla ordinaria')} · ${escHTML(c.fecha_envio||'')}</p>
-    <div class="comp-detail-row"><span class="comp-detail-label">Salario Bruto</span><span class="comp-detail-val">₡ ${bruto.toLocaleString('es-CR')}</span></div>
-    <div class="comp-detail-row"><span class="comp-detail-label">Deducción CCSS (empleado)</span><span class="comp-detail-val" style="color:var(--orange)">- ₡ ${ccss.toLocaleString('es-CR')}</span></div>
-    <div class="comp-detail-row"><span class="comp-detail-label">Deducción Renta</span><span class="comp-detail-val" style="color:var(--orange)">- ₡ ${renta.toLocaleString('es-CR')}</span></div>
-    <div class="comp-detail-row"><span class="comp-detail-label">Otras Deducciones</span><span class="comp-detail-val" style="color:var(--orange)">- ₡ ${otras.toLocaleString('es-CR')}</span></div>
-    <div class="comp-detail-row"><span class="comp-detail-label">Total Deducciones</span><span class="comp-detail-val" style="color:var(--red)">- ₡ ${total_deduc.toLocaleString('es-CR')}</span></div>
-    <div class="comp-detail-row total-row" style="margin-top:8px;padding-top:12px;border-top:2px solid var(--b200)">
-      <span class="comp-detail-label">Salario Neto a Depositar</span>
-      <span class="comp-detail-val">₡ ${neto.toLocaleString('es-CR')}</span>
+    <div style="background:var(--b50);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--b700)">
+      <strong>Puesto:</strong> ${escHTML(c.puesto||'—')} &nbsp;·&nbsp;
+      <strong>Ingreso:</strong> ${escHTML(c.fecha_ingreso||'—')} &nbsp;·&nbsp;
+      ${escHTML(c.descripcion||'Planilla ordinaria')}
     </div>
-    ${c.observaciones ? `<div style="margin-top:12px;font-size:12px;color:var(--g400)"><strong>Observaciones:</strong> ${escHTML(c.observaciones)}</div>` : ''}
+    <div style="font-size:11px;font-weight:700;color:var(--b600);letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--b100)">Beneficios</div>
+    <div class="comp-detail-row" style="font-size:11px;color:var(--g400)">
+      <span class="comp-detail-label"></span><span class="comp-detail-val" style="font-size:10px;color:var(--g300)">Días trabajados: ${diasTrab||'—'}</span>
+    </div>
+    ${detRow('Salario Mes', salarioMes, false)}
+    ${detRow('Bono', bono, false)}
+    ${detRow('Horas Dobles / Tiempo Doble', horasDobles, false)}
+    ${detRow('Subsidio Incapacidad', subsidio, false)}
+    <div class="comp-detail-row" style="font-weight:700;border-top:1px solid var(--b100);padding-top:6px;margin-top:2px">
+      <span class="comp-detail-label">Total Beneficios</span>
+      <span class="comp-detail-val" style="color:var(--b600)">₡ ${fmt(totalBenef)}</span>
+    </div>
+    <div style="font-size:11px;font-weight:700;color:var(--b600);letter-spacing:.5px;text-transform:uppercase;margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--b100)">Deducciones</div>
+    ${detRow('CCSS 10.67%', ccss, true)}
+    ${detRow('Impuesto de Renta', renta, true)}
+    ${detRow('Pensión Voluntaria', pension, true)}
+    ${detRow('CxC', cxc, true)}
+    <div class="comp-detail-row" style="font-weight:700;border-top:1px solid var(--b100);padding-top:6px;margin-top:2px">
+      <span class="comp-detail-label">Total Deducciones</span>
+      <span class="comp-detail-val" style="color:var(--red)">- ₡ ${fmt(totalRebaj)}</span>
+    </div>
+    <div class="comp-detail-row total-row" style="margin-top:10px;padding-top:12px;border-top:2px solid var(--b500)">
+      <span class="comp-detail-label">Neto a Pagar</span>
+      <span class="comp-detail-val">₡ ${fmt(neto)}</span>
+    </div>
   `;
   openModal('compModal');
 }
 
 function printComprobante() {
   if (!currentComprobante) return;
-  const c = currentComprobante;
+  const c    = currentComprobante;
+  const pv   = k => parseFloat(c[k]) || 0;
+  const fmt  = n => (parseFloat(n)||0).toLocaleString('es-CR');
+
   const [cy, cm] = (c.periodo || '').split('-');
   const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const label = cm ? `${meses[parseInt(cm)-1]} ${cy}` : c.periodo;
+  // Fecha larga ej: "31 de diciembre de 2025"
+  const dateLabel = (() => {
+    if (!cy || !cm) return label;
+    const lastDay = new Date(parseInt(cy), parseInt(cm), 0).getDate();
+    return `${lastDay} de ${meses[parseInt(cm)-1]} de ${cy}`;
+  })();
 
-  const bruto = parseFloat(c.salario_bruto  || c.salarioBruto  || 0);
-  const ccss  = parseFloat(c.ccss_empleado  || c.ccssEmpleado  || 0);
-  const renta = parseFloat(c.renta          || 0);
-  const otras = parseFloat(c.otras_deduc    || c.otrasDeduc    || 0);
-  const neto  = parseFloat(c.salario_neto   || c.salarioNeto   || 0);
-  const total_deduc = ccss + renta + otras;
+  const diasTrab      = pv('dias_trabajados');
+  const salarioMes    = pv('salario_mes');
+  const bono          = pv('bono');
+  const horasDobles   = pv('horas_dobles');
+  const subsidio      = pv('subsidio');
+  const totalBenef    = pv('total_beneficios') || (salarioMes + bono + horasDobles + subsidio);
+  const pension       = pv('pension_voluntaria');
+  const ccss          = pv('ccss');
+  const renta         = pv('renta');
+  const cxc           = pv('cxc');
+  const totalRebaj    = pv('total_rebajos') || (pension + ccss + renta + cxc);
+  const neto          = pv('salario_neto');
 
-  const w = window.open('', '_blank', 'width=700,height=600');
+  const logoUrl = location.href.replace(/\/[^\/]*$/, '/') + 'assets/img/lean-logo.png';
+
+  const tr = (label, dias, monto, bold, red) =>
+    `<tr style="${bold?'font-weight:bold;':''}${red?'color:#CC0000;':''}">
+       <td style="padding:5px 8px;border-bottom:1px solid #ddd;font-size:12px">${label}</td>
+       <td style="padding:5px 8px;border-bottom:1px solid #ddd;font-size:12px;text-align:center">${dias||''}</td>
+       <td style="padding:5px 8px;border-bottom:1px solid #ddd;font-size:12px;text-align:right">${monto?fmt(monto):''}</td>
+     </tr>`;
+
+  const w = window.open('', '_blank', 'width=680,height=780');
   w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
   <title>Comprobante ${label}</title>
   <style>
-    body{font-family:Arial,sans-serif;padding:40px;color:#1E293B;max-width:600px;margin:auto}
-    h1{font-size:22px;color:#052960;margin-bottom:4px}
-    .sub{font-size:12px;color:#94A3B8;margin-bottom:24px}
-    table{width:100%;border-collapse:collapse}
-    td{padding:9px 12px;border-bottom:1px solid #E2E8F0;font-size:13px}
-    td:last-child{text-align:right;font-weight:600}
-    .total td{border-top:2px solid #1565C0;font-size:15px;font-weight:700;color:#052960}
-    .ded{color:#F97316}
-    footer{margin-top:32px;font-size:11px;color:#94A3B8;text-align:center}
-    @media print{body{padding:20px}}
+    *{box-sizing:border-box}
+    body{font-family:Arial,sans-serif;color:#1a1a1a;margin:0;padding:32px;max-width:620px;margin:auto}
+    .logo-row{display:flex;align-items:flex-start;gap:18px;margin-bottom:6px}
+    .logo-img{height:56px;width:auto}
+    .logo-text{font-size:28px;font-weight:900;letter-spacing:-1px;line-height:1.1}
+    .logo-text span{color:#00B4D8}
+    .logo-sub{font-size:9px;letter-spacing:1.5px;color:#444;margin-top:2px}
+    .logo-line{border:none;border-top:1.5px solid #00B4D8;margin:0 0 10px}
+    h2{text-align:center;font-size:16px;font-weight:700;margin:10px 0 2px}
+    .fecha-center{text-align:center;font-size:12px;color:#555;margin-bottom:16px}
+    .info-table{width:100%;border-collapse:collapse;margin-bottom:16px}
+    .info-table td{font-size:12px;padding:4px 8px}
+    .info-table td:first-child{color:#1565C0;font-weight:600;width:140px}
+    .section-title{font-style:italic;font-weight:bold;font-size:13px;margin:8px 0 4px}
+    .detail-table{width:100%;border-collapse:collapse;margin-bottom:8px}
+    .detail-table th{font-size:11px;text-align:left;padding:5px 8px;background:#f0f0f0;border-bottom:1px solid #ccc}
+    .detail-table th:not(:first-child){text-align:right}
+    .neto-row td{font-weight:bold;font-size:14px;color:#052960;border-top:2px solid #1565C0;padding:8px}
+    .neto-row td:last-child{text-align:right}
+    footer{margin-top:24px;font-size:10px;color:#999;text-align:center}
+    @media print{body{padding:16px}}
   </style></head><body>
-  <h1>Lean Consulting S.A.</h1>
-  <div class="sub">Comprobante de Pago — ${label}<br/>${escHTML(c.descripcion||'Planilla ordinaria')}</div>
-  <p style="font-size:13px;margin-bottom:16px"><strong>Colaborador:</strong> ${escHTML(currentUser?.nombre||c.nombre||'')} &nbsp;·&nbsp; <strong>Cédula:</strong> ${escHTML(currentUser?.cedula||c.cedula||'')}</p>
-  <table>
-    <tr><td>Salario Bruto</td><td>₡ ${bruto.toLocaleString('es-CR')}</td></tr>
-    <tr><td class="ded">Deducción CCSS (empleado)</td><td class="ded">- ₡ ${ccss.toLocaleString('es-CR')}</td></tr>
-    <tr><td class="ded">Deducción Renta</td><td class="ded">- ₡ ${renta.toLocaleString('es-CR')}</td></tr>
-    <tr><td class="ded">Otras Deducciones</td><td class="ded">- ₡ ${otras.toLocaleString('es-CR')}</td></tr>
-    <tr><td>Total Deducciones</td><td>- ₡ ${total_deduc.toLocaleString('es-CR')}</td></tr>
-    <tr class="total"><td>Salario Neto</td><td>₡ ${neto.toLocaleString('es-CR')}</td></tr>
+  <div class="logo-row">
+    <img class="logo-img" src="${logoUrl}" onerror="this.style.display='none';document.getElementById('logo-fallback').style.display='block'" alt="Lean Consulting"/>
+    <div id="logo-fallback" style="display:none">
+      <div class="logo-text">LE<span>A</span>N</div>
+      <div style="font-weight:900;font-size:14px;letter-spacing:1px">CONSULTING</div>
+      <div class="logo-sub">PROJECT MANAGEMENT</div>
+    </div>
+  </div>
+  <hr class="logo-line"/>
+  <h2>Comprobante de pago de planilla</h2>
+  <div class="fecha-center">${dateLabel}</div>
+
+  <table class="info-table">
+    <tr><td>Nombre:</td><td>${escHTML(c.nombre||currentUser?.nombre||'')}</td></tr>
+    <tr><td>Identificacion</td><td>${escHTML(c.cedula||currentUser?.cedula||'')}</td></tr>
+    <tr><td>Puesto</td><td>${escHTML(c.puesto||'')}</td></tr>
+    <tr><td>Fecha de Ingreso</td><td>${escHTML(c.fecha_ingreso||'')}</td></tr>
+    <tr><td>Salario Bruto</td><td style="text-align:right;font-weight:600">${fmt(totalBenef)}</td></tr>
   </table>
-  ${c.observaciones ? `<p style="margin-top:16px;font-size:12px;color:#475569"><strong>Observaciones:</strong> ${escHTML(c.observaciones)}</p>` : ''}
+
+  <div style="border:1px solid #ccc;border-radius:4px;overflow:hidden">
+    <div style="background:#f7f7f7;padding:6px 8px;font-weight:bold;font-size:13px;border-bottom:1px solid #ccc">Detalle de Salario</div>
+    <div style="padding:8px">
+      <div class="section-title">Beneficios</div>
+      <table class="detail-table">
+        <thead><tr>
+          <th></th><th style="text-align:center">Dias trabajados</th><th style="text-align:right"></th>
+        </tr></thead>
+        <tbody>
+          ${tr('Salario Mes', diasTrab, salarioMes, false, false)}
+          ${bono         ? tr('Bono',                  '', bono,        false, false) : ''}
+          ${horasDobles  ? tr('Horas Extras',           '', horasDobles, false, false) : ''}
+          ${subsidio     ? tr('Subsidio Incapacidad',   '', subsidio,    false, false) : ''}
+          ${tr('Total Beneficios', '', totalBenef, true, false)}
+        </tbody>
+      </table>
+
+      <div class="section-title">Deducciones</div>
+      <table class="detail-table">
+        <tbody>
+          ${ccss    ? tr('CCSS 10,67%',         '', ccss,    false, true) : ''}
+          ${renta   ? tr('Impuesto de renta',   '', renta,   false, true) : ''}
+          ${pension ? tr('Pensión Voluntaria',  '', pension, false, true) : ''}
+          ${cxc     ? tr('CxC',                 '', cxc,     false, true) : ''}
+          ${tr('Total Deducciones', '', totalRebaj, true, true)}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <table class="detail-table" style="margin-top:8px">
+    <tr class="neto-row">
+      <td>Neto a Pagar</td><td></td><td style="text-align:right">₡ ${fmt(neto)}</td>
+    </tr>
+  </table>
+
   <footer>Lean Consulting S.A. &nbsp;·&nbsp; Portal de Recursos Humanos &nbsp;·&nbsp; Generado el ${new Date().toLocaleDateString('es-CR')}</footer>
   <script>window.onload=()=>window.print()<\/script>
   </body></html>`);
