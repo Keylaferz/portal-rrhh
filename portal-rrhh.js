@@ -266,8 +266,11 @@ function calcPD(emp){
 // ══════════════════════════════
 async function loadUserData(cedula) {
   showOverlay('Cargando sus datos...');
-  // Cargar tickets del colaborador
-  const resT = await gasGet({action:'getTickets', cedula});
+  // Parallelizar ambas llamadas al GAS para reducir el tiempo de carga
+  const [resT, resE] = await Promise.all([
+    gasGet({action:'getTickets', cedula}),
+    gasGet({action:'getExpediente', cedula}),
+  ]);
   if(resT && resT.ok && resT.data) {
     tickets = resT.data.map(parseTicket);
     saveCache(`hr_tickets_${cedula}`, tickets);
@@ -275,7 +278,6 @@ async function loadUserData(cedula) {
     tickets = (getCache(`hr_tickets_${cedula}`) || []).filter(t=>t.cedula===cedula);
   }
   // Cargar expediente — no se cachean campos sensibles (IBAN, salario, médico)
-  const resE = await gasGet({action:'getExpediente', cedula});
   if(resE && resE.ok && resE.data) {
     expedientes[cedula] = resE.data;
     const safe = Object.assign({}, resE.data);
@@ -459,9 +461,8 @@ async function initAdmin(){
   sessionStorage.setItem('hr_session', JSON.stringify({isAdmin: true, exp: Date.now() + 8*60*60*1000}));
   show('adminScreen');
   document.getElementById('adminList').innerHTML='<div class="empty-state"><div class="empty-icon">...</div><div>Cargando datos...</div></div>';
-  // Cargar empleados y tickets desde Sheets
-  await loadEmployees();
-  await loadAllTickets();
+  // Parallelizar carga de empleados y tickets para reducir el tiempo de inicio
+  await Promise.all([loadEmployees(), loadAllTickets()]);
   populateEmpFilter(); renderAdmin();
   refreshEmpSelect();
 }
@@ -697,7 +698,7 @@ async function confirmSend(){
     excluidos:t.details.excluidos||0, obs:t.obs||'', motivo:t.details.motivo||''
   });
   // Usar el ID devuelto por el servidor
-  const ticketId = (res && res.ok && res.data && res.data.id) ? res.data.id : t.id;
+  const ticketId = (res && res.ok && res.data && res.data.id) ? res.data.id : '—';
   // Recargar tickets desde Sheets
   await loadUserData(currentUser.cedula);
   // Enviar correo
@@ -720,7 +721,7 @@ async function callGAS(params, silent=false){
   const hide = () => { if(!silent) document.getElementById('sendingOverlay').classList.remove('active'); };
   try{
     const controller = new AbortController();
-    const timeoutId  = setTimeout(() => controller.abort(), 12000);
+    const timeoutId  = setTimeout(() => controller.abort(), 25000); // 25s — GAS puede tardar en arrancar en frío
     const url=`${GAS_URL}?${new URLSearchParams(params)}`;
     const res=await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
@@ -752,11 +753,19 @@ async function callGASPost(body) {
   if (!GAS_URL || GAS_URL === 'PEGUE_SU_URL_GAS_AQUI') return null;
   document.getElementById('sendingOverlay').classList.add('active');
   try {
-    const res  = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(body) });
+    const controller = new AbortController();
+    const timeoutId  = setTimeout(() => controller.abort(), 60000); // 60s — PDFs grandes pueden tardar
+    const res  = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(body), signal: controller.signal });
+    clearTimeout(timeoutId);
     const text = await res.text();
     try { return JSON.parse(text); } catch { return null; }
-  } catch { return null; }
-  finally { document.getElementById('sendingOverlay').classList.remove('active'); }
+  } catch(e) {
+    if (e.name === 'AbortError') toast('Tiempo de espera', 'El servidor tardó demasiado. Intente de nuevo.', 'warning');
+    else toast('Error de red', 'Verifique su conexión e intente de nuevo.', 'warning');
+    return null;
+  } finally {
+    document.getElementById('sendingOverlay').classList.remove('active');
+  }
 }
 
 // ══════════════════════════════
@@ -1666,8 +1675,7 @@ async function restoreSession() {
       }
       isAdmin = true;
       show('adminScreen');
-      await loadEmployees();
-      await loadAllTickets();
+      await Promise.all([loadEmployees(), loadAllTickets()]);
       populateEmpFilter(); renderAdmin(); refreshEmpSelect();
     } else if (s.cedula) {
       if (EMPLOYEES.length === 0) await loadEmployees();
@@ -1705,6 +1713,10 @@ window.addEventListener('offline', () => {
 document.addEventListener('DOMContentLoaded', () => {
   _updateOfflineBanner();
   restoreSession();
+  // Pre-cargar lista de empleados en segundo plano para que el login sea inmediato
+  if (GAS_URL && GAS_URL !== 'PEGUE_SU_URL_GAS_AQUI') {
+    loadEmployees();
+  }
 });
 
 // ══════════════════════════════════════════════════════
@@ -1732,7 +1744,7 @@ function getAutoPeriodo() {
 function loadCompColabSelector() {
   const sel = document.getElementById('compColabSelect');
   if (!sel) return;
-  const lista = (empleados || []).filter(e => e.acceso !== 'inactivo');
+  const lista = (EMPLOYEES || []).filter(e => e.acceso !== 'inactivo');
   sel.innerHTML = '<option value="">Seleccione un colaborador...</option>' +
     lista.map(e => `<option value="${escHTML(e.cedula)}">${escHTML(e.nombre)}</option>`).join('');
   const periodo = getAutoPeriodo();
@@ -1787,7 +1799,7 @@ async function sendComprobantePDF() {
     reader.readAsDataURL(compPDFFile);
   });
 
-  const emp = (empleados || []).find(e => e.cedula === cedula);
+  const emp = (EMPLOYEES || []).find(e => e.cedula === cedula);
   showOverlay('Enviando comprobante...');
 
   const msgCheck = document.getElementById('compMsgCheck');
@@ -1809,7 +1821,7 @@ async function sendComprobantePDF() {
   hideOverlay();
 
   if (res && res.ok) {
-    toast('Comprobante enviado', `Correo enviado a ${escHTML(res.emailTo || emp?.nombre || cedula)}`, 'success');
+    toast('Comprobante enviado', `Correo enviado a ${escHTML(res.data?.emailTo || emp?.nombre || cedula)}`, 'success');
     resetCompPDF();
     document.getElementById('compColabSelect').value = '';
     loadCompAdminHistory();
