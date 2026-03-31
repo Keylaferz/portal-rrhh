@@ -451,11 +451,23 @@ function switchLoginTab(t,btn){
 }
 
 async function doLogin(){
-  if(EMPLOYEES.length===0) await loadEmployees();
   const raw=document.getElementById('cedulaInput').value.trim();
   const v=raw.replace(/[-.\s]/g,'');
   const err=document.getElementById('loginError');
   if(!validateCedula(v)){err.style.display='block';err.textContent='Ingrese una cédula válida (8–12 dígitos).';return;}
+
+  // Siempre verificar contra Google Sheets (datos frescos, sin caché)
+  const res = await gasGet({action:'getEmpleados'});
+  if (res && res.ok && res.data && res.data.length > 0) {
+    EMPLOYEES = _mapEmployees(res.data);
+    saveCache('hr_employees', EMPLOYEES);
+  }
+  if (EMPLOYEES.length === 0) {
+    err.style.display='block';
+    err.textContent='No se pudo conectar al servidor. Verifique su conexión e intente de nuevo.';
+    return;
+  }
+
   const emp=EMPLOYEES.find(e=>e.cedula===v);
   if(!emp){err.style.display='block';err.textContent='Cédula no encontrada. Verifique el número ingresado.';return;}
   if(emp.acceso==='inactivo'){err.style.display='block';err.textContent='Su acceso al portal ha sido deshabilitado. Contacte a RRHH.';return;}

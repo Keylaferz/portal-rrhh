@@ -548,7 +548,11 @@ function sendComprobantePDF(p) {
     'o cualquier otro concepto, por favor no duden en contactarnos.\n\n' +
     (mensajeExtra ? mensajeExtra + '\n\n' : '') +
     'Saludos,\n' +
-    'RRHH — ' + EMPRESA_NOMBRE;
+    'RRHH — ' + EMPRESA_NOMBRE + '\n\n' +
+    '---\n' +
+    '⚠️ NOTA IMPORTANTE: Este comprobante es enviado desde un correo de generación automática. ' +
+    'NO RESPONDER A ESTE CORREO. Si necesita comunicarse con administración o tiene alguna duda ' +
+    'respecto a su pago, comuníquese al correo de Keyla Fernández: kfernandez@leancr.com';
 
   const asunto = '[RRHH] Comprobante de pago — ' + periodoLabel + ' — ' + EMPRESA_NOMBRE;
 
@@ -703,7 +707,13 @@ erow('Total Deducciones', '', totalRebaj, true, true) +
 
 '<!-- Footer -->' +
 '<tr><td style="background:#F8FAFC;padding:12px 28px;border-top:1px solid #E2E8F0;text-align:center">' +
-'<span style="font-size:10px;color:#94A3B8">' + EMPRESA_NOMBRE + ' &nbsp;·&nbsp; Portal de Recursos Humanos<br/>Este comprobante es generado automaticamente. Para consultas contacte a RRHH.</span>' +
+'<span style="font-size:10px;color:#94A3B8">' + EMPRESA_NOMBRE + ' &nbsp;·&nbsp; Portal de Recursos Humanos</span><br/>' +
+'<div style="margin-top:8px;padding:10px 14px;background:#FFF8E1;border:1px solid #FFE082;border-radius:6px;text-align:left">' +
+'<span style="font-size:11px;font-weight:700;color:#B45309">⚠️ NOTA IMPORTANTE:</span> ' +
+'<span style="font-size:11px;color:#78350F">Este comprobante es enviado desde un correo de generación automática. <strong>NO RESPONDER A ESTE CORREO.</strong> ' +
+'Si necesita comunicarse con administración o tiene alguna duda respecto a su pago, comuníquese al correo de Keyla Fernández: ' +
+'<a href="mailto:kfernandez@leancr.com" style="color:#1565C0">kfernandez@leancr.com</a></span>' +
+'</div>' +
 '</td></tr>' +
 
 '</table></td></tr></table></body></html>';
