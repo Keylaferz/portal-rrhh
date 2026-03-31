@@ -675,7 +675,7 @@ function showPreview(t){
   document.getElementById('emailPreview').innerHTML=`
     <span class="ef">Asunto:</span> [RRHH] Nueva solicitud — ${tlabel(t.tipo)} — ${t.empleado}<br>
     <hr>
-    <span class="ef">Ticket:</span> ${t.id} &nbsp;|&nbsp; <span class="ef">Fecha:</span> ${fmt(t.fecha)}<br>
+    <span class="ef">Fecha:</span> ${fmt(t.fecha)}<br>
     <hr>
     <span class="ef">Colaborador:</span> ${t.empleado} · ${t.cedula} · ${t.puesto}<br>
     <hr>
@@ -693,9 +693,11 @@ async function confirmSend(){
   const res = await callGAS({
     action:'saveTicket',
     cedula:t.cedula, empleado:t.empleado, puesto:t.puesto,
-    tipo:t.tipo, inicio:t.details.inicio, fin:t.details.fin,
+    tipo:t.tipo, status:'pending', fecha:t.fecha,
+    inicio:t.details.inicio, fin:t.details.fin,
     dias:t.details.dias, turno:t.details.turno||'',
-    excluidos:t.details.excluidos||0, obs:t.obs||'', motivo:t.details.motivo||''
+    excluidos:t.details.excluidos||0, obs:t.obs||'', motivo:t.details.motivo||'',
+    tipo_inc:t.details.tipo||'', medico:t.details.medico||'',
   });
   // Usar el ID devuelto por el servidor
   const ticketId = (res && res.ok && res.data && res.data.id) ? res.data.id : '—';
