@@ -1767,6 +1767,8 @@ function resetCompPDF() {
   const zone = document.getElementById('compPDFZone');
   zone.style.borderColor = '';
   zone.style.background  = '';
+  const cb = document.getElementById('compMsgCheck');
+  if (cb) { cb.checked = false; toggleCompMsg(cb); }
 }
 
 // ── Enviar comprobante PDF ──
@@ -1787,6 +1789,11 @@ async function sendComprobantePDF() {
   const emp = (empleados || []).find(e => e.cedula === cedula);
   showOverlay('Enviando comprobante...');
 
+  const msgCheck = document.getElementById('compMsgCheck');
+  const mensajeExtra = (msgCheck?.checked && document.getElementById('compMsgText')?.value.trim())
+    ? document.getElementById('compMsgText').value.trim()
+    : '';
+
   const res = await callGASPost({
     action:       'sendComprobantePDF',
     cedula,
@@ -1795,6 +1802,7 @@ async function sendComprobantePDF() {
     periodoLabel: periodo.label,
     pdfBase64,
     pdfName:      compPDFFile.name,
+    mensajeExtra,
   });
 
   hideOverlay();
@@ -1809,7 +1817,15 @@ async function sendComprobantePDF() {
   }
 }
 
+// ── Mensaje extra toggle ──
+function toggleCompMsg(cb) {
+  document.getElementById('compMsgExtra').style.display = cb.checked ? 'block' : 'none';
+  if (!cb.checked) document.getElementById('compMsgText').value = '';
+}
+
 // ── Historial admin ──
+let _compAdminData = [];
+
 async function loadCompAdminHistory() {
   const res = await gasGet({ action: 'getComprobantesAdmin' });
   const list = document.getElementById('compAdminHistoryList');
@@ -1817,26 +1833,62 @@ async function loadCompAdminHistory() {
     list.innerHTML = '<div class="empty-state"><div class="empty-icon">—</div><div>No hay comprobantes enviados aún</div></div>';
     return;
   }
-  // Agrupa por periodo+fecha_envio
-  const grupos = {};
-  res.data.forEach(c => {
-    const k = `${c.periodo}|${c.fecha_envio}`;
-    if (!grupos[k]) grupos[k] = { periodo: c.periodo, fecha: c.fecha_envio, count: 0 };
-    grupos[k].count++;
-  });
-  list.innerHTML = Object.values(grupos)
-    .sort((a,b) => b.periodo.localeCompare(a.periodo))
-    .map(g => {
-      const [yr, mo] = (g.periodo || '').split('-');
-      const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-      const label = mo ? `${meses[parseInt(mo)-1]} ${yr}` : g.periodo;
-      return `<div class="comp-card">
-        <div class="comp-card-left">
-          <div class="comp-card-badge" style="font-size:9px">${(g.periodo||'').replace('-','/')}</div>
-          <div><div class="comp-card-period">${label}</div><div class="comp-card-meta">Enviado el ${g.fecha||'—'} · ${g.count} colaboradores</div></div>
+  _compAdminData = res.data;
+
+  // Poblar filtros de colaborador y año
+  const colabs = [...new Map(_compAdminData.map(c => [c.cedula, c.nombre])).entries()];
+  const years  = [...new Set(_compAdminData.map(c => (c.periodo||'').split('-')[0]).filter(Boolean))].sort().reverse();
+
+  const fColab = document.getElementById('histFiltColab');
+  if (fColab) {
+    fColab.innerHTML = '<option value="">Todos</option>' +
+      colabs.map(([ced, nom]) => `<option value="${escHTML(ced)}">${escHTML(nom||ced)}</option>`).join('');
+  }
+  const fYear = document.getElementById('histFiltYear');
+  if (fYear) {
+    fYear.innerHTML = '<option value="">Todos</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+  }
+
+  filterCompAdminHistory();
+}
+
+function filterCompAdminHistory() {
+  const list  = document.getElementById('compAdminHistoryList');
+  const fCol  = document.getElementById('histFiltColab')?.value  || '';
+  const fYear = document.getElementById('histFiltYear')?.value   || '';
+  const fMo   = document.getElementById('histFiltMonth')?.value  || '';
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+  const filtered = _compAdminData.filter(c => {
+    const [cy, cm] = (c.periodo||'').split('-');
+    if (fCol  && c.cedula !== fCol)  return false;
+    if (fYear && cy !== fYear)       return false;
+    if (fMo   && cm !== fMo)         return false;
+    return true;
+  }).sort((a,b) => (b.periodo||'').localeCompare(a.periodo||''));
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">—</div><div>No hay comprobantes para los filtros seleccionados</div></div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(c => {
+    const [cy, cm] = (c.periodo||'').split('-');
+    const label = cm ? `${meses[parseInt(cm)-1]} ${cy}` : (c.periodo||'—');
+    const driveUrl = c.drive_url || '';
+    return `<div class="comp-card">
+      <div class="comp-card-left">
+        <div class="comp-card-badge" style="font-size:9px">${(c.periodo||'').replace('-','/')}</div>
+        <div>
+          <div class="comp-card-period">${escHTML(c.nombre||'—')}</div>
+          <div class="comp-card-meta">${label} · Enviado el ${escHTML(c.fecha_envio||'—')}</div>
         </div>
-      </div>`;
-    }).join('');
+      </div>
+      <div class="comp-card-right" style="gap:6px">
+        ${driveUrl ? `<a href="${escHTML(driveUrl)}" target="_blank" class="btn-sec" style="font-size:11px;padding:4px 10px;text-decoration:none">Ver PDF</a>` : ''}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ── Comprobantes colaborador ──
@@ -1880,19 +1932,24 @@ function renderMisComprobantes() {
 
   el.innerHTML = filtered.map((c, i) => {
     const [cy, cm] = (c.periodo || '').split('-');
-    const label = cm ? `${meses[parseInt(cm)-1]} ${cy}` : c.periodo;
-    const neto  = parseFloat(c.salario_neto || c.salarioNeto || 0);
-    return `<div class="comp-card" style="cursor:pointer" onclick="openCompModal(${i})">
-      <div class="comp-card-left">
+    const label    = cm ? `${meses[parseInt(cm)-1]} ${cy}` : c.periodo;
+    const driveUrl = c.drive_url || '';
+    return `<div class="comp-card">
+      <div class="comp-card-left" style="cursor:pointer;flex:1" onclick="openCompModal(${i})">
         <div class="comp-card-badge">${(c.periodo||'').replace('-','/')}</div>
         <div>
           <div class="comp-card-period">${label}</div>
-          <div class="comp-card-meta">${escHTML(c.descripcion || 'Planilla ordinaria')}</div>
+          <div class="comp-card-meta">${escHTML(c.descripcion || 'Comprobante de pago')} · ${escHTML(c.fecha_envio||'')}</div>
         </div>
       </div>
-      <div class="comp-card-right">
-        <div class="comp-card-amount">₡ ${neto.toLocaleString('es-CR')}</div>
-        <div class="comp-card-label">Salario neto</div>
+      <div class="comp-card-right" style="gap:6px;align-items:center">
+        ${driveUrl
+          ? `<a href="${escHTML(driveUrl)}" target="_blank" rel="noopener"
+               class="btn-cyan" style="font-size:11px;padding:5px 12px;text-decoration:none;white-space:nowrap">
+               Descargar PDF
+             </a>`
+          : `<span style="font-size:11px;color:var(--g300)">Enviado por correo</span>`
+        }
       </div>
     </div>`;
   }).join('');

@@ -506,7 +506,20 @@ function sendComprobantePDF(p) {
   var pdfBlob  = Utilities.newBlob(pdfBytes, 'application/pdf',
                    p.pdfName || ('Comprobante_' + periodo + '.pdf'));
 
+  // Guardar PDF en Google Drive y obtener link de descarga
+  var driveUrl = '';
+  try {
+    var folders = DriveApp.getFoldersByName('RRHH - Comprobantes');
+    var folder  = folders.hasNext() ? folders.next() : DriveApp.createFolder('RRHH - Comprobantes');
+    var driveFile = folder.createFile(pdfBlob);
+    driveFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    driveUrl = 'https://drive.google.com/file/d/' + driveFile.getId() + '/view';
+  } catch(driveEx) {
+    Logger.log('Advertencia: no se pudo guardar en Drive: ' + driveEx.toString());
+  }
+
   // Cuerpo del correo
+  var mensajeExtra = String(p.mensajeExtra || '').trim();
   var bodyText =
     'Estimado/a ' + primerNombre + ',\n\n' +
     'Esperamos que se encuentre bien.\n\n' +
@@ -515,6 +528,7 @@ function sendComprobantePDF(p) {
     'puede hacerla llegar a mi persona o bien a Cristián.\n\n' +
     'Si requiere alguna actualización en su información o tienen dudas sobre deducciones, horas extras ' +
     'o cualquier otro concepto, por favor no duden en contactarnos.\n\n' +
+    (mensajeExtra ? mensajeExtra + '\n\n' : '') +
     'Saludos,\n' +
     'RRHH — ' + EMPRESA_NOMBRE;
 
@@ -549,11 +563,11 @@ function sendComprobantePDF(p) {
     id: id, cedula: cedula, nombre: nombre, emailcorp: emailTo,
     puesto: emp.puesto || '', periodo: periodo,
     periodo_label: periodoLabel, descripcion: 'Comprobante PDF',
-    fecha_envio: fechaEnv,
+    drive_url: driveUrl, fecha_envio: fechaEnv,
   };
   sh.appendRow(headers.map(function(h) { return dataObj[h] !== undefined ? dataObj[h] : ''; }));
 
-  return ok({ id: id, emailTo: emailTo });
+  return ok({ id: id, emailTo: emailTo, driveUrl: driveUrl });
 }
 
 function ensureComprobantesSheet() {
@@ -564,7 +578,7 @@ function ensureComprobantesSheet() {
       'periodo','periodo_label','descripcion',
       'dias_trabajados','salario_mes','bono','horas_dobles','subsidio',
       'total_beneficios','pension_voluntaria','ccss','renta','cxc',
-      'total_rebajos','salario_neto','fecha_envio'
+      'total_rebajos','salario_neto','drive_url','fecha_envio'
     ]);
   }
 }

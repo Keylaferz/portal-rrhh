@@ -466,14 +466,56 @@
         <input type="file" id="compPDFInput" accept=".pdf" style="display:none"
           onchange="selectCompPDF(this.files[0])"/>
 
+        <!-- Mensaje extra opcional -->
+        <div style="margin-top:16px;background:var(--b50);border-radius:10px;padding:14px 16px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;font-weight:600;color:var(--b700)">
+            <input type="checkbox" id="compMsgCheck" onchange="toggleCompMsg(this)" style="width:16px;height:16px;cursor:pointer"/>
+            ¿Desea agregar un mensaje extra al correo?
+          </label>
+          <div id="compMsgExtra" style="display:none;margin-top:10px">
+            <textarea id="compMsgText" rows="4"
+              placeholder="Ej: Recuerde que el próximo lunes es feriado. Cualquier consulta con gusto la atendemos."
+              style="width:100%;border:1px solid var(--b200);border-radius:8px;padding:10px 12px;font-size:13px;font-family:inherit;resize:vertical;outline:none;box-sizing:border-box"></textarea>
+          </div>
+        </div>
+
         <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:16px">
           <button class="btn-sec" onclick="resetCompPDF()">Limpiar</button>
           <button class="btn-cyan" onclick="sendComprobantePDF()">Enviar por correo</button>
         </div>
 
         <!-- Historial de envíos -->
-        <div id="compAdminHistory" style="margin-top:24px">
-          <div style="font-family:'DM Serif Display',serif;font-size:15px;color:var(--b800);margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid var(--b100)">Comprobantes enviados</div>
+        <div id="compAdminHistory" style="margin-top:28px">
+          <div style="font-family:'DM Serif Display',serif;font-size:15px;color:var(--b800);margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid var(--b100)">Historial de comprobantes enviados</div>
+
+          <!-- Filtros historial -->
+          <div class="form-row" style="margin-bottom:14px">
+            <div class="fg">
+              <label style="font-size:11px">Colaborador</label>
+              <select id="histFiltColab" onchange="filterCompAdminHistory()">
+                <option value="">Todos</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label style="font-size:11px">Año</label>
+              <select id="histFiltYear" onchange="filterCompAdminHistory()">
+                <option value="">Todos</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label style="font-size:11px">Mes</label>
+              <select id="histFiltMonth" onchange="filterCompAdminHistory()">
+                <option value="">Todos</option>
+                <option value="01">Enero</option><option value="02">Febrero</option>
+                <option value="03">Marzo</option><option value="04">Abril</option>
+                <option value="05">Mayo</option><option value="06">Junio</option>
+                <option value="07">Julio</option><option value="08">Agosto</option>
+                <option value="09">Septiembre</option><option value="10">Octubre</option>
+                <option value="11">Noviembre</option><option value="12">Diciembre</option>
+              </select>
+            </div>
+          </div>
+
           <div id="compAdminHistoryList">
             <div class="empty-state"><div class="empty-icon">—</div><div>No hay comprobantes enviados aún</div></div>
           </div>
