@@ -71,7 +71,6 @@
       <button class="tab-btn active" role="tab" aria-selected="true"  aria-controls="tab-nueva"             onclick="showTab('nueva',this)">Nueva</button>
       <button class="tab-btn"        role="tab" aria-selected="false" aria-controls="tab-expediente"        onclick="showTab('expediente',this)">Expediente</button>
       <button class="tab-btn"        role="tab" aria-selected="false" aria-controls="tab-historial"         onclick="showTab('historial',this)">Solicitudes</button>
-      <button class="tab-btn"        role="tab" aria-selected="false" aria-controls="tab-historial_completo" onclick="showTab('historial_completo',this)">Historial</button>
       <button class="tab-btn"        role="tab" aria-selected="false" aria-controls="tab-desglose"          onclick="showTab('desglose',this)">Vacaciones</button>
       <button class="tab-btn"        role="tab" aria-selected="false" aria-controls="tab-comprobantes"      onclick="showTab('comprobantes',this);loadMisComprobantes()">Comprobantes</button>
     </div>
@@ -182,6 +181,15 @@
           <select class="filter-select" id="filt-year" onchange="renderTickets()">
             <option value="">Todos los años</option>
           </select>
+          <select class="filter-select" id="filt-month-emp" onchange="renderTickets()">
+            <option value="">Todos los meses</option>
+            <option value="01">Enero</option><option value="02">Febrero</option>
+            <option value="03">Marzo</option><option value="04">Abril</option>
+            <option value="05">Mayo</option><option value="06">Junio</option>
+            <option value="07">Julio</option><option value="08">Agosto</option>
+            <option value="09">Setiembre</option><option value="10">Octubre</option>
+            <option value="11">Noviembre</option><option value="12">Diciembre</option>
+          </select>
           <select class="filter-select" id="filt-tipo-emp" onchange="renderTickets()">
             <option value="">Todos los tipos</option>
             <option value="vacaciones">Vacaciones</option>
@@ -200,11 +208,6 @@
         </div>
         <div id="ticketsList"></div>
       </div>
-    </div>
-
-    <!-- Tab: Historial Completo -->
-    <div class="tab-panel" id="tab-historial_completo">
-      <div id="historialCompleto"></div>
     </div>
 
     <!-- Tab: Desglose Vacaciones -->
@@ -254,7 +257,6 @@
         <ul class="rules-list">
           <li>Las vacaciones se acumulan <strong>1 día por mes laborado</strong> desde la fecha de ingreso.</li>
           <li>Los <strong>sábados, domingos, feriados nacionales</strong> y su <strong>día de cumpleaños</strong> no cuentan.</li>
-          <li>Deben solicitarse con al menos <strong>7 días hábiles de anticipación</strong>.</li>
           <li>Los <strong>días sin goce</strong> no descuentan vacaciones pero sí afectan el salario.</li>
           <li>Cada solicitud puede editarse o cancelarse máximo <strong>2 veces</strong>.</li>
         </ul>
@@ -324,6 +326,16 @@
         <div class="stat-card"><div class="stat-icon si-cyan">T</div><div><div class="stat-val" id="adm-total">0</div><div class="stat-lbl">Total</div></div></div>
       </div>
       <div class="filter-bar">
+        <select class="filter-select" id="filt-adm-year"  onchange="renderAdmin()"><option value="">Todos los años</option></select>
+        <select class="filter-select" id="filt-adm-month" onchange="renderAdmin()">
+          <option value="">Todos los meses</option>
+          <option value="01">Enero</option><option value="02">Febrero</option>
+          <option value="03">Marzo</option><option value="04">Abril</option>
+          <option value="05">Mayo</option><option value="06">Junio</option>
+          <option value="07">Julio</option><option value="08">Agosto</option>
+          <option value="09">Setiembre</option><option value="10">Octubre</option>
+          <option value="11">Noviembre</option><option value="12">Diciembre</option>
+        </select>
         <select class="filter-select" id="filt-status" onchange="renderAdmin()"><option value="">Todos los estados</option><option value="pending">Pendiente</option><option value="inprogress">En Gestión</option><option value="approved">Aprobadas</option><option value="denied">Denegadas</option><option value="cancelled">Canceladas</option></select>
         <select class="filter-select" id="filt-tipo"   onchange="renderAdmin()"><option value="">Todos los tipos</option><option value="vacaciones">Vacaciones</option><option value="incapacidad">Incapacidad</option><option value="cumpleanos">Cumpleaños</option><option value="personalday">Personal Day</option><option value="singoce">Sin Goce</option></select>
         <select class="filter-select" id="filt-emp"    onchange="renderAdmin()"><option value="">Todos los empleados</option></select>
@@ -445,9 +457,25 @@
             </select>
           </div>
           <div class="fg">
-            <label>Período de pago (automático)</label>
-            <input type="text" id="compPeriodoLabel" readonly
-              style="background:var(--b50);color:var(--b700);font-weight:600;cursor:default"/>
+            <label>Mes del período</label>
+            <select id="compPeriodoMes">
+              <option value="01">Enero</option>
+              <option value="02">Febrero</option>
+              <option value="03">Marzo</option>
+              <option value="04">Abril</option>
+              <option value="05">Mayo</option>
+              <option value="06">Junio</option>
+              <option value="07">Julio</option>
+              <option value="08">Agosto</option>
+              <option value="09">Setiembre</option>
+              <option value="10">Octubre</option>
+              <option value="11">Noviembre</option>
+              <option value="12">Diciembre</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label>Año del período</label>
+            <input type="number" id="compPeriodoAnio" min="2020" max="2099" style="font-weight:600"/>
           </div>
         </div>
 

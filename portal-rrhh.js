@@ -917,16 +917,31 @@ function populateEmpFilter(){
 }
 
 function resetFilters(){
-  ['filt-status','filt-tipo','filt-emp'].forEach(id=>document.getElementById(id).value='');
+  ['filt-adm-year','filt-adm-month','filt-status','filt-tipo','filt-emp'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
   renderAdmin();
 }
 
 function renderAdmin(){
   // tickets ya cargados desde Sheets en loadAllTickets()
+
+  // Poblar filtro de años
+  const years=[...new Set(tickets.map(t=>(t.fecha||'').split('-')[0]).filter(Boolean))].sort().reverse();
+  const yrSel=document.getElementById('filt-adm-year');
+  if(yrSel){
+    const cur=yrSel.value;
+    yrSel.innerHTML='<option value="">Todos los años</option>'+years.map(y=>`<option value="${y}"${y===cur?' selected':''}>${y}</option>`).join('');
+  }
+
+  const fy=yrSel?yrSel.value:'';
+  const fm=document.getElementById('filt-adm-month')?.value||'';
   const fs=document.getElementById('filt-status').value;
   const ft=document.getElementById('filt-tipo').value;
   const fe=document.getElementById('filt-emp').value;
   let list=[...tickets].reverse();
+  if(fy) list=list.filter(t=>(t.fecha||'').startsWith(fy));
+  if(fm) list=list.filter(t=>(t.fecha||'').substring(5,7)===fm);
   if(fs) list=list.filter(t=>t.status===fs);
   if(ft) list=list.filter(t=>t.tipo===ft);
   if(fe) list=list.filter(t=>t.empleado===fe);
@@ -1177,9 +1192,11 @@ function renderTickets(){
 
   // Aplicar filtros
   const fy=yearSel?yearSel.value:'';
+  const fm=document.getElementById('filt-month-emp')?document.getElementById('filt-month-emp').value:'';
   const ft=document.getElementById('filt-tipo-emp')?document.getElementById('filt-tipo-emp').value:'';
   let filtered=[...mine].reverse();
   if(fy) filtered=filtered.filter(t=>t.fecha.startsWith(fy));
+  if(fm) filtered=filtered.filter(t=>(t.fecha||'').substring(5,7)===fm);
   if(ft) filtered=filtered.filter(t=>t.tipo===ft);
 
   const el=document.getElementById('ticketsList');
@@ -1782,27 +1799,34 @@ let misComprobantes    = [];   // comprobantes del colaborador actual
 let currentComprobante = null; // para modal de detalle
 
 // ── Período automático: mes anterior al envío ──
-function getAutoPeriodo() {
-  const now  = new Date();
-  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+// ── Lee el período seleccionado manualmente por el admin ──
+function getSelectedPeriodo() {
   const meses = ['enero','febrero','marzo','abril','mayo','junio',
                  'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const mes  = document.getElementById('compPeriodoMes')?.value  || '';
+  const anio = document.getElementById('compPeriodoAnio')?.value || '';
+  if (!mes || !anio) return null;
   return {
-    label: meses[prev.getMonth()] + ' ' + prev.getFullYear(),
-    value: `${prev.getFullYear()}-${String(prev.getMonth()+1).padStart(2,'0')}`,
+    value: `${anio}-${mes}`,
+    label: meses[parseInt(mes, 10) - 1] + ' ' + anio,
   };
 }
 
-// ── Cargar selector de colaboradores ──
+// ── Cargar selector de colaboradores y preseleccionar el mes anterior ──
 function loadCompColabSelector() {
   const sel = document.getElementById('compColabSelect');
   if (!sel) return;
   const lista = (EMPLOYEES || []).filter(e => e.acceso !== 'inactivo');
   sel.innerHTML = '<option value="">Seleccione un colaborador...</option>' +
     lista.map(e => `<option value="${escHTML(e.cedula)}">${escHTML(e.nombre)}</option>`).join('');
-  const periodo = getAutoPeriodo();
-  const lbl = document.getElementById('compPeriodoLabel');
-  if (lbl) lbl.value = periodo.label.charAt(0).toUpperCase() + periodo.label.slice(1);
+
+  // Preseleccionar mes anterior como punto de partida (el admin puede cambiarlo)
+  const now  = new Date();
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const mesSel  = document.getElementById('compPeriodoMes');
+  const anioInp = document.getElementById('compPeriodoAnio');
+  if (mesSel)  mesSel.value  = String(prev.getMonth() + 1).padStart(2, '0');
+  if (anioInp) anioInp.value = prev.getFullYear();
 }
 
 // ── Drag & Drop PDF ──
@@ -1843,7 +1867,8 @@ async function sendComprobantePDF() {
   if (!cedula)      { toast('Colaborador requerido', 'Seleccione un colaborador', 'warning'); return; }
   if (!compPDFFile) { toast('PDF requerido', 'Seleccione el PDF del comprobante', 'warning'); return; }
 
-  const periodo = getAutoPeriodo();
+  const periodo = getSelectedPeriodo();
+  if (!periodo) { toast('Período requerido', 'Seleccione el mes y año del período', 'warning'); return; }
 
   const pdfBase64 = await new Promise((resolve, reject) => {
     const reader = new FileReader();
