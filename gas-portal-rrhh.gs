@@ -126,14 +126,14 @@ function err(msg)  { return JSON.stringify({ ok: false, error: msg  }); }
 // Formato con período:  PREFIX-YYYYMM-NNNN   (ej: COMP-202601-0001)
 // Formato sin período:  PREFIX-NNNN           (ej: EMP-0001)
 function autoId(prefix, sheetName, periodo) {
-  var sh      = getSheet(sheetName);
-  var lastRow = Math.max(0, sh.getLastRow() - 1); // -1 por la fila de encabezados
-  var seq     = String(lastRow + 1).padStart(4, '0');
+  const sh      = getSheet(sheetName);
+  const lastRow = Math.max(0, sh.getLastRow() - 1); // -1 por la fila de encabezados
+  const seq     = String(lastRow + 1).padStart(4, '0');
   if (periodo) {
     return prefix + '-' + periodo.replace('-', '') + '-' + seq;
   }
-  var now    = new Date();
-  var yyyymm = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0');
+  const now    = new Date();
+  const yyyymm = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0');
   return prefix + '-' + yyyymm + '-' + seq;
 }
 
@@ -510,35 +510,35 @@ function sendComprobantePDF(p) {
   // Período: se usa el enviado desde el cliente (ya calculado como mes anterior)
   const meses = ['enero','febrero','marzo','abril','mayo','junio',
                  'julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  var periodoLabel = p.periodoLabel || '';
-  var periodo      = p.periodo      || '';
+  let periodoLabel = p.periodoLabel || '';
+  let periodo      = p.periodo      || '';
   if (!periodoLabel) {
-    var now  = new Date();
-    var prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const now  = new Date();
+    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     periodoLabel = meses[prev.getMonth()] + ' ' + prev.getFullYear();
-    periodo      = prev.getFullYear() + '-' + String(prev.getMonth()+1).padStart(2,'0');
+    periodo      = prev.getFullYear() + '-' + String(prev.getMonth() + 1).padStart(2, '0');
   }
 
   // Decodificar PDF
-  var pdfBytes = Utilities.base64Decode(p.pdfBase64);
-  var pdfBlob  = Utilities.newBlob(pdfBytes, 'application/pdf',
-                   p.pdfName || ('Comprobante_' + periodo + '.pdf'));
+  const pdfBytes = Utilities.base64Decode(p.pdfBase64);
+  const pdfBlob  = Utilities.newBlob(pdfBytes, 'application/pdf',
+                     p.pdfName || ('Comprobante_' + periodo + '.pdf'));
 
   // Guardar PDF en Google Drive y obtener link de descarga
-  var driveUrl = '';
+  let driveUrl = '';
   try {
-    var folders = DriveApp.getFoldersByName('RRHH - Comprobantes');
-    var folder  = folders.hasNext() ? folders.next() : DriveApp.createFolder('RRHH - Comprobantes');
-    var driveFile = folder.createFile(pdfBlob);
+    const folders   = DriveApp.getFoldersByName('RRHH - Comprobantes');
+    const folder    = folders.hasNext() ? folders.next() : DriveApp.createFolder('RRHH - Comprobantes');
+    const driveFile = folder.createFile(pdfBlob);
     driveFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     driveUrl = 'https://drive.google.com/file/d/' + driveFile.getId() + '/view';
-  } catch(driveEx) {
+  } catch (driveEx) {
     Logger.log('Advertencia: no se pudo guardar en Drive: ' + driveEx.toString());
   }
 
   // Cuerpo del correo
-  var mensajeExtra = String(p.mensajeExtra || '').trim();
-  var bodyText =
+  const mensajeExtra = String(p.mensajeExtra || '').trim();
+  const bodyText =
     'Estimado/a ' + primerNombre + ',\n\n' +
     'Esperamos que se encuentre bien.\n\n' +
     'Adjunto encontrará el comprobante de pago correspondiente al periodo de ' + periodoLabel + ', ' +
@@ -550,15 +550,15 @@ function sendComprobantePDF(p) {
     'Saludos,\n' +
     'RRHH — ' + EMPRESA_NOMBRE;
 
-  var asunto = '[RRHH] Comprobante de pago — ' + periodoLabel + ' — ' + EMPRESA_NOMBRE;
+  const asunto = '[RRHH] Comprobante de pago — ' + periodoLabel + ' — ' + EMPRESA_NOMBRE;
 
   try {
     GmailApp.sendEmail(emailTo, asunto, bodyText, {
       attachments: [pdfBlob],
       name: EMPRESA_NOMBRE + ' — RRHH',
     });
-    // CC a RRHH
-    RRHH_EMAILS.forEach(function(addr) {
+    // CC a RRHH (solo si dirección diferente al colaborador)
+    RRHH_EMAILS.forEach(addr => {
       if (addr && addr.includes('@') && addr !== emailTo) {
         GmailApp.sendEmail(addr, '[CC] ' + asunto, bodyText, {
           attachments: [pdfBlob],
@@ -566,26 +566,29 @@ function sendComprobantePDF(p) {
         });
       }
     });
-  } catch(ex) {
+  } catch (ex) {
     Logger.log('Error enviando PDF a ' + emailTo + ': ' + ex.toString());
     return err('Error al enviar correo: ' + ex.toString());
   }
 
   // Guardar registro en Comprobantes
-  var sh      = getSheet(SHEET.comprobantes);
-  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
-  var id       = autoId('COMP', SHEET.comprobantes, periodo);
-  var fechaEnv = new Date().toLocaleDateString('es-CR');
+  const sh      = getSheet(SHEET.comprobantes);
+  const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  const id      = autoId('COMP', SHEET.comprobantes, periodo);
+  const fechaEnv = new Date().toLocaleDateString('es-CR');
 
-  var dataObj = {
-    id: id, cedula: cedula, nombre: nombre, emailcorp: emailTo,
-    puesto: emp.puesto || '', periodo: periodo,
-    periodo_label: periodoLabel, descripcion: 'Comprobante PDF',
-    drive_url: driveUrl, fecha_envio: fechaEnv,
+  const dataObj = {
+    id, cedula, nombre, emailcorp: emailTo,
+    puesto:        emp.puesto || '',
+    periodo,
+    periodo_label: periodoLabel,
+    descripcion:   'Comprobante PDF',
+    drive_url:     driveUrl,
+    fecha_envio:   fechaEnv,
   };
-  sh.appendRow(headers.map(function(h) { return dataObj[h] !== undefined ? dataObj[h] : ''; }));
+  sh.appendRow(headers.map(h => (dataObj[h] !== undefined ? dataObj[h] : '')));
 
-  return ok({ id: id, emailTo: emailTo, driveUrl: driveUrl });
+  return ok({ id, emailTo, driveUrl });
 }
 
 function ensureComprobantesSheet() {

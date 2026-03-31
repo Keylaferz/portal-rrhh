@@ -66,38 +66,50 @@ function getCRHolidays(year) {
     `${year}-07-25`,`${year}-08-02`,`${year}-08-15`,
     `${year}-09-15`,`${year}-10-12`,`${year}-12-25`,
   ];
-  const a=year%19,b=Math.floor(year/100),c=year%100;
-  const d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25);
-  const g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30;
-  const i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7;
-  const m=Math.floor((a+11*h+22*l)/451);
-  const month=Math.floor((h+l-7*m+114)/31);
-  const day=((h+l-7*m+114)%31)+1;
-  const easter=new Date(year,month-1,day);
-  const th=new Date(easter); th.setDate(easter.getDate()-3);
-  const fr=new Date(easter); fr.setDate(easter.getDate()-2);
-  fixed.push(th.toISOString().split('T')[0]);
-  fixed.push(fr.toISOString().split('T')[0]);
+  // Algoritmo de Gauss para calcular el Jueves y Viernes Santo
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day   = ((h + l - 7 * m + 114) % 31) + 1;
+  const easter = new Date(year, month - 1, day);
+  const thursday = new Date(easter); thursday.setDate(easter.getDate() - 3);
+  const friday   = new Date(easter); friday.setDate(easter.getDate() - 2);
+  fixed.push(thursday.toISOString().split('T')[0]);
+  fixed.push(friday.toISOString().split('T')[0]);
   return fixed;
 }
-function isHoliday(ds){ return getCRHolidays(parseInt(ds.split('-')[0])).includes(ds); }
-function isBirthday(ds,bday){
-  if(!bday) return false;
-  const p=bday.split('/'); if(p.length!==3) return false;
-  const [dd,mm]=p; const[,m,d]=ds.split('-'); return m===mm&&d===dd;
+
+function isHoliday(ds) {
+  return getCRHolidays(parseInt(ds.split('-')[0])).includes(ds);
 }
-function countWorkdays(ini,fin,bdayStr){
-  if(!ini||!fin||fin<ini) return {days:0,excluded:[]};
-  let days=0; const excluded=[];
-  const start=new Date(ini+'T12:00:00'), end=new Date(fin+'T12:00:00');
-  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
-    const ds=d.toISOString().split('T')[0], dow=d.getDay();
-    if(dow===0||dow===6){excluded.push({date:ds,reason:'Fin de semana'});continue;}
-    if(isHoliday(ds))   {excluded.push({date:ds,reason:'Feriado'});continue;}
-    if(isBirthday(ds,bdayStr)){excluded.push({date:ds,reason:'Cumpleaños'});continue;}
+
+function isBirthday(ds, bday) {
+  if (!bday) return false;
+  const parts = bday.split('/');
+  if (parts.length !== 3) return false;
+  const [dd, mm] = parts;
+  const [, m, d]  = ds.split('-');
+  return m === mm && d === dd;
+}
+
+function countWorkdays(ini, fin, bdayStr) {
+  if (!ini || !fin || fin < ini) return { days: 0, excluded: [] };
+  let days = 0;
+  const excluded = [];
+  const start = new Date(ini + 'T12:00:00');
+  const end   = new Date(fin + 'T12:00:00');
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const ds  = d.toISOString().split('T')[0];
+    const dow = d.getDay();
+    if (dow === 0 || dow === 6)    { excluded.push({ date: ds, reason: 'Fin de semana' }); continue; }
+    if (isHoliday(ds))             { excluded.push({ date: ds, reason: 'Feriado'       }); continue; }
+    if (isBirthday(ds, bdayStr))   { excluded.push({ date: ds, reason: 'Cumpleaños'    }); continue; }
     days++;
   }
-  return {days,excluded};
+  return { days, excluded };
 }
 
 // ── EMPLOYEES — cargado dinámicamente desde Google Sheets ──
@@ -153,28 +165,58 @@ let cancelData    = {};
 let selectedTickets = new Set();
 
 // ── HELPERS ──
+
+// Formatea fechas YYYY-MM-DD o Date a DD/MM/YYYY
 const fmt = d => {
-  if(!d) return '—';
-  if(typeof d==='string'&&d.match(/^\d{4}-\d{2}-\d{2}$/)){const[y,m,day]=d.split('-');return`${day}/${m}/${y}`;}
-  if(d instanceof Date) return d.toLocaleDateString('es-CR');
+  if (!d) return '—';
+  if (typeof d === 'string' && d.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    const [y, m, day] = d.split('-');
+    return `${day}/${m}/${y}`;
+  }
+  if (d instanceof Date) return d.toLocaleDateString('es-CR');
   return d;
 };
-const tlabel     = t => ({vacaciones:'Vacaciones',incapacidad:'Incapacidad',cumpleanos:'Cumpleaños',personalday:'Personal Day',singoce:'Día Sin Goce'}[t]||t);
-const tlabelText = t => ({vacaciones:'Vacaciones',incapacidad:'Incapacidad',cumpleanos:'Cumpleanos',personalday:'Personal Day',singoce:'Sin Goce'}[t]||t);
-const slabel = s => ({pending:'En Proceso',inprogress:'En Gestión',approved:'Aprobada',denied:'Denegada',cancelled:'Cancelada'}[s]||s);
-const sbadge = s => `<span class="sb ${s||'pending'}">${slabel(s)}</span>`;
-// Guarda en caché local — clave por usuario para evitar colisiones en PC compartidas
-const save    = () => {
+
+// Etiquetas legibles para tipos, estados y badges
+const tlabel = t => ({
+  vacaciones:  'Vacaciones',
+  incapacidad: 'Incapacidad',
+  cumpleanos:  'Cumpleaños',
+  personalday: 'Personal Day',
+  singoce:     'Día Sin Goce',
+}[t] || t);
+
+const tlabelText = t => ({
+  vacaciones:  'Vacaciones',
+  incapacidad: 'Incapacidad',
+  cumpleanos:  'Cumpleanos',
+  personalday: 'Personal Day',
+  singoce:     'Sin Goce',
+}[t] || t);
+
+const slabel = s => ({
+  pending:    'En Proceso',
+  inprogress: 'En Gestión',
+  approved:   'Aprobada',
+  denied:     'Denegada',
+  cancelled:  'Cancelada',
+}[s] || s);
+
+const sbadge = s => `<span class="sb ${s || 'pending'}">${slabel(s)}</span>`;
+
+// Guarda tickets en caché local — clave por usuario para evitar colisiones en PC compartidas
+const save = () => {
   const key = currentUser ? `hr_tickets_${currentUser.cedula}` : 'hr_tickets_all';
   saveCache(key, tickets);
 };
+
+// Guarda expediente sin campos sensibles (IBAN, salario, datos médicos)
 const saveExp = () => {
-  // No se cachean campos sensibles (IBAN, salario, datos médicos)
-  if(!currentUser) return;
+  if (!currentUser) return;
   const exp = expedientes[currentUser.cedula];
-  if(!exp) return;
+  if (!exp) return;
   const safe = Object.assign({}, exp);
-  ['iban','salario','meds','alergias'].forEach(f => delete safe[f]);
+  ['iban', 'salario', 'meds', 'alergias'].forEach(f => delete safe[f]);
   saveCache(`hr_expedientes_${currentUser.cedula}`, safe);
 };
 
@@ -302,35 +344,35 @@ async function loadAllTickets() {
   hideOverlay();
 }
 
-// Convierte fila plana del Sheet a objeto con details anidado
+// Convierte fila plana del Sheet en un objeto con el sub-objeto details anidado
 function parseTicket(t) {
-  if(t.details) return t; // ya está parseado
+  if (t.details) return t; // ya fue parseado anteriormente
   return {
-    id:       t.id,
-    cedula:   t.cedula,
-    empleado: t.empleado,
-    puesto:   t.puesto,
-    tipo:     t.tipo,
-    status:   t.status,
-    fecha:    t.fecha,
-    obs:      t.obs,
-    notaAdmin:t.notaAdmin,
-    editCount:parseInt(t.editCount)||0,
-    resueltoFecha:    t.resueltoFecha,
-    fechaCancelacion: t.fechaCancelacion,
-    motivoCancelacion:t.motivoCancelacion,
-    motivoEdicion:    t.motivoEdicion,
-    ultimaEdicion:    t.ultimaEdicion,
+    id:                t.id,
+    cedula:            t.cedula,
+    empleado:          t.empleado,
+    puesto:            t.puesto,
+    tipo:              t.tipo,
+    status:            t.status,
+    fecha:             t.fecha,
+    obs:               t.obs,
+    notaAdmin:         t.notaAdmin,
+    editCount:         parseInt(t.editCount) || 0,
+    resueltoFecha:     t.resueltoFecha,
+    fechaCancelacion:  t.fechaCancelacion,
+    motivoCancelacion: t.motivoCancelacion,
+    motivoEdicion:     t.motivoEdicion,
+    ultimaEdicion:     t.ultimaEdicion,
     details: {
-      inicio:   t.inicio,
-      fin:      t.fin,
-      dias:     parseFloat(t.dias)||0,
-      turno:    t.turno,
-      excluidos:parseInt(t.excluidos)||0,
-      tipo:     t.tipo_inc||'',
-      medico:   t.medico||'',
-      motivo:   t.motivo||'',
-    }
+      inicio:    t.inicio,
+      fin:       t.fin,
+      dias:      parseFloat(t.dias) || 0,
+      turno:     t.turno,
+      excluidos: parseInt(t.excluidos) || 0,
+      tipo:      t.tipo_inc || '',
+      medico:    t.medico   || '',
+      motivo:    t.motivo   || '',
+    },
   };
 }
 
@@ -352,40 +394,49 @@ const typeFields={
   singoce:    {ini:'sg-ini', fin:'sg-fin'},
 };
 
-function calcDays(tipo){
-  const f=typeFields[tipo]; if(!f) return;
-  const ini=getField(f.ini),fin=getField(f.fin);
-  const ctr=document.getElementById('days-counter-'+tipo);
-  if(!ini||!fin||fin<ini){if(ctr)ctr.style.display='none';return;}
-  const bday=currentUser?getEmpBirthday(currentUser):'';
-  const{days,excluded}=countWorkdays(ini,fin,bday);
-  document.getElementById('days-val-'+tipo).textContent=days;
-  document.getElementById('days-range-'+tipo).textContent=`${fmt(ini)} → ${fmt(fin)}`;
-  const exclEl=document.getElementById('days-excl-'+tipo);
-  const fines=excluded.filter(e=>e.reason==='Fin de semana').length;
-  const feries=excluded.filter(e=>e.reason==='Feriado').length;
-  const cumple=excluded.filter(e=>e.reason==='Cumpleaños').length;
-  const parts=[]; if(fines)parts.push(`${fines} fin(es) de semana`);
-  if(feries)parts.push(`${feries} feriado(s)`); if(cumple)parts.push(`${cumple} cumpleaños`);
-  exclEl.textContent=parts.length?`Excluidos: ${parts.join(', ')}` :'';
-  if(ctr)ctr.style.display='flex';
+// ── Helper compartido para renderizar el contador de días en cualquier formulario ──
+function _renderDaysCounter(ini, fin, ids) {
+  const ctr = document.getElementById(ids.counter);
+  if (!ini || !fin || fin < ini) {
+    if (ctr) ctr.style.display = 'none';
+    return;
+  }
+  const bday = currentUser ? getEmpBirthday(currentUser) : '';
+  const { days, excluded } = countWorkdays(ini, fin, bday);
+
+  document.getElementById(ids.val).textContent   = days;
+  document.getElementById(ids.range).textContent = `${fmt(ini)} → ${fmt(fin)}`;
+
+  const fines  = excluded.filter(e => e.reason === 'Fin de semana').length;
+  const feries = excluded.filter(e => e.reason === 'Feriado').length;
+  const cumple = excluded.filter(e => e.reason === 'Cumpleaños').length;
+  const parts  = [];
+  if (fines)  parts.push(`${fines} fin(es) de semana`);
+  if (feries) parts.push(`${feries} feriado(s)`);
+  if (cumple) parts.push(`${cumple} cumpleaños`);
+
+  document.getElementById(ids.excl).textContent = parts.length ? `Excluidos: ${parts.join(', ')}` : '';
+  if (ctr) ctr.style.display = 'flex';
 }
 
-function calcEditDays(){
-  const ini=getField('edit-ini'),fin=getField('edit-fin');
-  const ctr=document.getElementById('edit-days-counter');
-  if(!ini||!fin||fin<ini){ctr.style.display='none';return;}
-  const bday=currentUser?getEmpBirthday(currentUser):'';
-  const{days,excluded}=countWorkdays(ini,fin,bday);
-  document.getElementById('edit-days-val').textContent=days;
-  document.getElementById('edit-days-range').textContent=`${fmt(ini)} → ${fmt(fin)}`;
-  const fines=excluded.filter(e=>e.reason==='Fin de semana').length;
-  const feries=excluded.filter(e=>e.reason==='Feriado').length;
-  const cumple=excluded.filter(e=>e.reason==='Cumpleaños').length;
-  const parts=[]; if(fines)parts.push(`${fines} fin(es) de semana`);
-  if(feries)parts.push(`${feries} feriado(s)`); if(cumple)parts.push(`${cumple} cumpleaños`);
-  document.getElementById('edit-days-excl').textContent=parts.length?`Excluidos: ${parts.join(', ')}`:'';
-  ctr.style.display='flex';
+function calcDays(tipo) {
+  const f = typeFields[tipo];
+  if (!f) return;
+  _renderDaysCounter(getField(f.ini), getField(f.fin), {
+    counter: `days-counter-${tipo}`,
+    val:     `days-val-${tipo}`,
+    range:   `days-range-${tipo}`,
+    excl:    `days-excl-${tipo}`,
+  });
+}
+
+function calcEditDays() {
+  _renderDaysCounter(getField('edit-ini'), getField('edit-fin'), {
+    counter: 'edit-days-counter',
+    val:     'edit-days-val',
+    range:   'edit-days-range',
+    excl:    'edit-days-excl',
+  });
 }
 
 // ══════════════════════════════
