@@ -1858,24 +1858,21 @@ window.addEventListener('offline', () => {
 // AVISO DE PRIVACIDAD — Ley N.º 8968 (Costa Rica)
 // ══════════════════════════════════════════════════════
 function checkPrivacyConsent() {
-  // Siempre mostrar el aviso en cada carga de página
+  // Resetear en cada carga de página
   privacyAccepted = false;
-  document.getElementById('privacyCheck').checked = false;
-  const btn = document.getElementById('privacyBtn');
-  btn.disabled = true; btn.style.opacity = '0.45'; btn.style.cursor = 'not-allowed';
-  document.getElementById('privacyModal').style.display = 'flex';
+  const cb = document.getElementById('loginPrivacyCheck');
+  if (cb) cb.checked = false;
 }
 
-function togglePrivacyBtn() {
-  const btn     = document.getElementById('privacyBtn');
-  const checked = document.getElementById('privacyCheck').checked;
-  btn.disabled       = !checked;
-  btn.style.opacity  = checked ? '1'       : '0.45';
-  btn.style.cursor   = checked ? 'pointer' : 'not-allowed';
+function openPrivacyModal(e) {
+  if (e) e.preventDefault();
+  document.getElementById('privacyModal').style.display = 'flex';
 }
 
 function acceptPrivacy() {
   privacyAccepted = true;
+  const cb = document.getElementById('loginPrivacyCheck');
+  if (cb) cb.checked = true;
   document.getElementById('privacyModal').style.display = 'none';
 }
 
