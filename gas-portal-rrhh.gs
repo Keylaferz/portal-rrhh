@@ -20,6 +20,8 @@ const SS_ID         = '';          // Deje vacío para usar la hoja activa (vinc
                                    // O pegue el ID del spreadsheet: '1BxiM...'
 const RRHH_EMAILS   = ['kfernandez@leancr.com', 'cfernandez@leancr.com'];
 const RRHH_CC       = RRHH_EMAILS.join(',');
+const SENDER_NAME   = 'Keyla Fernández — RRHH';
+const REPLY_TO      = 'kfernandez@leancr.com';
 const EMPRESA_NOMBRE = 'Lean Consulting S.A.';
 
 // ── Nombres de hojas ───────────────────────────────────────────────
@@ -308,7 +310,7 @@ function sendEmailAction(p) {
     const unique  = [...new Set(targets)];
 
     unique.forEach(addr => {
-      GmailApp.sendEmail(addr, asunto, '', { htmlBody: html });
+      GmailApp.sendEmail(addr, asunto, '', { htmlBody: html, name: SENDER_NAME, replyTo: REPLY_TO });
     });
     return ok(null);
   } catch (ex) {
@@ -475,11 +477,11 @@ function saveComprobante(p) {
     try {
       const asunto = `[RRHH] Comprobante de pago — ${p.periodoLabel || p.periodo} — ${EMPRESA_NOMBRE}`;
       const html   = buildComprobanteEmail(dataObj);
-      GmailApp.sendEmail(emailTo, asunto, '', { htmlBody: html });
+      GmailApp.sendEmail(emailTo, asunto, '', { htmlBody: html, name: SENDER_NAME, replyTo: REPLY_TO });
       if (RRHH_EMAILS.length > 0) {
         RRHH_EMAILS.forEach(addr => {
           if (addr && addr.includes('@'))
-            GmailApp.sendEmail(addr, '[CC] ' + asunto, '', { htmlBody: html });
+            GmailApp.sendEmail(addr, '[CC] ' + asunto, '', { htmlBody: html, name: SENDER_NAME, replyTo: REPLY_TO });
         });
       }
     } catch (ex) {
@@ -559,14 +561,16 @@ function sendComprobantePDF(p) {
   try {
     GmailApp.sendEmail(emailTo, asunto, bodyText, {
       attachments: [pdfBlob],
-      name: EMPRESA_NOMBRE + ' — RRHH',
+      name: SENDER_NAME,
+      replyTo: REPLY_TO,
     });
     // CC a RRHH (solo si dirección diferente al colaborador)
     RRHH_EMAILS.forEach(addr => {
       if (addr && addr.includes('@') && addr !== emailTo) {
         GmailApp.sendEmail(addr, '[CC] ' + asunto, bodyText, {
           attachments: [pdfBlob],
-          name: EMPRESA_NOMBRE + ' — RRHH',
+          name: SENDER_NAME,
+          replyTo: REPLY_TO,
         });
       }
     });
