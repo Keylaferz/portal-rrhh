@@ -2011,6 +2011,18 @@ function toggleCompMsg(cb) {
   if (!cb.checked) document.getElementById('compMsgText').value = '';
 }
 
+// Convierte un objeto comprobante a etiqueta legible: usa periodo_label guardado
+// en el Sheet si existe; de lo contrario recalcula desde el campo periodo.
+function fmtPeriodo(c) {
+  if (c.periodo_label && !c.periodo_label.includes('undefined')) return c.periodo_label;
+  const _m = ['enero','febrero','marzo','abril','mayo','junio',
+               'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const [cy, cm] = (c.periodo || '').split('-');
+  const idx = parseInt(cm, 10) - 1;
+  if (idx >= 0 && idx < 12 && cy) return `${_m[idx]} ${cy}`;
+  return c.periodo || '—';
+}
+
 // ── Historial admin ──
 let _compAdminData = [];
 
@@ -2061,8 +2073,7 @@ function filterCompAdminHistory() {
   }
 
   list.innerHTML = filtered.map(c => {
-    const [cy, cm] = (c.periodo||'').split('-');
-    const label = cm ? `${meses[parseInt(cm)-1]} ${cy}` : (c.periodo||'—');
+    const label = fmtPeriodo(c);
     const driveUrl = c.drive_url || '';
     return `<div class="comp-card">
       <div class="comp-card-left">
@@ -2119,8 +2130,7 @@ function renderMisComprobantes() {
   }
 
   el.innerHTML = filtered.map((c, i) => {
-    const [cy, cm] = (c.periodo || '').split('-');
-    const label    = cm ? `${meses[parseInt(cm)-1]} ${cy}` : c.periodo;
+    const label = fmtPeriodo(c);
     const driveUrl = c.drive_url || '';
     return `<div class="comp-card">
       <div class="comp-card-left" style="cursor:pointer;flex:1" onclick="openCompModal(${i})">
@@ -2151,10 +2161,7 @@ function openCompModal(idx) {
   if (!c) return;
   currentComprobante = c;
 
-  const [cy, cm] = (c.periodo || '').split('-');
-  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  const label = cm ? `${meses[parseInt(cm)-1]} ${cy}` : c.periodo;
-
+  const label = fmtPeriodo(c);
   document.getElementById('compModalTitle').textContent = `Comprobante — ${label}`;
 
   const fmt = n => (parseFloat(n)||0).toLocaleString('es-CR');
@@ -2220,14 +2227,15 @@ function printComprobante() {
   const pv   = k => parseFloat(c[k]) || 0;
   const fmt  = n => (parseFloat(n)||0).toLocaleString('es-CR');
 
+  const _m2 = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const [cy, cm] = (c.periodo || '').split('-');
-  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  const label = cm ? `${meses[parseInt(cm)-1]} ${cy}` : c.periodo;
+  const label = fmtPeriodo(c);
   // Fecha larga ej: "31 de diciembre de 2025"
   const dateLabel = (() => {
-    if (!cy || !cm) return label;
+    const idx = parseInt(cm, 10) - 1;
+    if (!cy || idx < 0 || idx > 11) return label;
     const lastDay = new Date(parseInt(cy), parseInt(cm), 0).getDate();
-    return `${lastDay} de ${meses[parseInt(cm)-1]} de ${cy}`;
+    return `${lastDay} de ${_m2[idx]} de ${cy}`;
   })();
 
   const diasTrab      = pv('dias_trabajados');
