@@ -20,7 +20,7 @@ const SS_ID         = '';          // Deje vacío para usar la hoja activa (vinc
                                    // O pegue el ID del spreadsheet: '1BxiM...'
 const RRHH_EMAILS   = ['kfernandez@leancr.com', 'cfernandez@leancr.com'];
 const RRHH_CC       = RRHH_EMAILS.join(',');
-const SENDER_NAME   = 'Keyla Fernández — RRHH';
+const SENDER_NAME   = 'Portal Lean Consulting - RRHH';
 const REPLY_TO      = 'kfernandez@leancr.com';
 const EMPRESA_NOMBRE = 'Lean Consulting S.A.';
 
