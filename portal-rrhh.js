@@ -997,6 +997,7 @@ function renderAdmin(){
             <button class="btn-approve" onclick="openResolve('${t.id}','approved')">✅ Aprobar</button>
             <button class="btn-deny"    onclick="openResolve('${t.id}','denied')">❌ Denegar</button>
           `:`<span class="resolved-stamp ${t.status==='approved'?'rs-approved':t.status==='cancelled'?'rs-cancelled':'rs-denied'}">${slabel(t.status)}</span>`}
+          <button class="btn-sec" style="font-size:11px;padding:6px 10px;margin-top:4px" onclick="downloadSingleTicketPDF('${t.id}')">📥 Descargar</button>
         </div>
       </div>
     </div>`;
@@ -1246,10 +1247,11 @@ function renderTickets(){
           ${t.resueltoFecha?`<div style="font-size:10px;color:var(--green)">✔ ${fmt(t.resueltoFecha.split('T')[0])}</div>`:''}
         </div>
       </div>
-      ${(canEdit||canCancel)?`<div class="ticket-actions">
+      <div class="ticket-actions">
         ${canEdit  ?`<button class="btn-edit"       onclick="openEdit('${t.id}')">✏️ Editar (${2-edits} restante${2-edits===1?'':'s'})</button>`:''}
         ${canCancel?`<button class="btn-cancel-req" onclick="openCancelReq('${t.id}')">🚫 Cancelar</button>`:''}
-      </div>`:''}
+        <button class="btn-sec" style="font-size:11px;padding:6px 10px" onclick="downloadSingleTicketPDF('${t.id}')">📥 Descargar</button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -1268,7 +1270,8 @@ function downloadSelectedPDF(){
   const ids=selectedTickets.size>0?[...selectedTickets]:tickets.filter(t=>t.cedula===currentUser.cedula).map(t=>t.id);
   const sel=tickets.filter(t=>ids.includes(t.id));
   if(!sel.length){toast('⚠️ Sin datos','No hay solicitudes para descargar','warning');return;}
-  downloadTicketsPDF(sel,`Mis Solicitudes — ${currentUser.nombre}`);
+  const filename = sel.length===1 ? ticketFileName(sel[0]) : '';
+  downloadTicketsPDF(sel,`Mis Solicitudes — ${currentUser.nombre}`, filename);
 }
 
 function downloadSelectedCSV(){
@@ -1373,7 +1376,49 @@ function renderFullHistory(){
 // ══════════════════════════════
 // DESCARGAS — PDF y CSV
 // ══════════════════════════════
-function downloadTicketsPDF(list, titulo){
+
+// Genera el nombre de archivo correcto según el tipo de solicitud
+function ticketFileName(t) {
+  const parts  = (t.empleado || '').split(' ');
+  const nombre = [parts[0], parts[1]].filter(Boolean).join('_');
+
+  // YYYY-MM-DD → DD-MM-YY
+  function ddmmyy(d) {
+    if (!d) return '';
+    const [y, m, day] = d.split('-');
+    return `${day}-${m}-${y.slice(2)}`;
+  }
+  // YYYY-MM-DD → DD_MM_YYYY
+  function ddmmyyyy(d) {
+    if (!d) return '';
+    const [y, m, day] = d.split('-');
+    return `${day}_${m}_${y}`;
+  }
+
+  const sol = t.fecha || '';
+  switch (t.tipo) {
+    case 'incapacidad':
+      return `RP-RH-0701-Incapacidad_${nombre}_${ddmmyy(t.details.inicio)}_${ddmmyy(t.details.fin)}`;
+    case 'vacaciones':
+      return `SL-RH-0702-Vacaciones_${nombre}_${ddmmyy(sol)}`;
+    case 'cumpleanos':
+      return `SL-RH-0705-Cumpleaños_${nombre}_${ddmmyyyy(sol)}`;
+    case 'singoce':
+      return `SL-RH-0702-Vacaciones_${nombre}_sin_goze_${ddmmyy(sol)}`;
+    case 'personalday':
+      return `SL-RH-0703-PersonalDay_${nombre}_${ddmmyy(sol)}`;
+    default:
+      return `SL-RH-Solicitud_${nombre}_${ddmmyy(sol)}`;
+  }
+}
+
+function downloadSingleTicketPDF(ticketId) {
+  const t = tickets.find(x => x.id === ticketId);
+  if (!t) return;
+  downloadTicketsPDF([t], tlabelText(t.tipo), ticketFileName(t));
+}
+
+function downloadTicketsPDF(list, titulo, filename=''){
   const rows=list.map(t=>`
     <tr style="border-bottom:1px solid #e2e8f0">
       <td style="padding:8px;font-size:12px">${t.id}</td>
@@ -1385,7 +1430,9 @@ function downloadTicketsPDF(list, titulo){
       <td style="padding:8px;font-size:12px">${t.notaAdmin||'—'}</td>
     </tr>`).join('');
 
+  const docTitle = filename || titulo;
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+  <title>${docTitle}</title>
   <style>body{font-family:Arial,sans-serif;padding:32px;color:#1e293b}
   h1{color:#1D4ED8;font-size:20px} h2{color:#475569;font-size:14px;font-weight:400;margin-top:4px}
   table{width:100%;border-collapse:collapse;margin-top:20px}
