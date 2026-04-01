@@ -26,12 +26,13 @@ const EMPRESA_NOMBRE = 'Lean Consulting S.A.';
 
 // ── Nombres de hojas ───────────────────────────────────────────────
 const SHEET = {
-  empleados:    'Empleados',
-  solicitudes:  'Solicitudes',
-  expedientes:  'Expedientes',
-  admins:       'Admins',
-  comprobantes: 'Comprobantes',
-  logs:         'Logs',
+  empleados:       'Empleados',
+  solicitudes:     'Solicitudes',
+  expedientes:     'Expedientes',
+  admins:          'Admins',
+  comprobantes:    'Comprobantes',
+  logs:            'Logs',
+  consentimientos: 'Consentimientos',
 };
 
 // ══════════════════════════════════════════════════════════════════
@@ -194,8 +195,9 @@ function doGet(e) {
       case 'getComprobantes':       return jsonOut(getComprobantes(p));
       case 'getComprobantesAdmin':  return jsonOut(getComprobantesAdmin());
 
-      // ── Logs de acceso ─────────────────────────────────────────
+      // ── Logs de acceso y consentimiento ───────────────────────
       case 'logAcceso':             return jsonOut(logAcceso(p));
+      case 'logConsentimiento':     return jsonOut(logConsentimiento(p));
 
       default:
         return jsonOut(err('Acción no reconocida: ' + action));
@@ -744,6 +746,24 @@ function getComprobantesAdmin() {
 //  LOGS DE ACCESO (Ley N.º 8968 — trazabilidad)
 // ══════════════════════════════════════════════════════════════════
 
+function logConsentimiento(p) {
+  const sh = getSheet(SHEET.consentimientos);
+  if (sh.getLastRow() === 0) {
+    sh.appendRow(['fecha', 'hora', 'cedula', 'nombre', 'version_aviso', 'aceptado']);
+    sh.setFrozenRows(1);
+  }
+  const now = new Date();
+  sh.appendRow([
+    now.toLocaleDateString('es-CR'),
+    now.toLocaleTimeString('es-CR'),
+    String(p.cedula  || '—'),
+    String(p.nombre  || '—'),
+    String(p.version || 'Aviso-v1'),
+    'Sí — Ley N.º 8968',
+  ]);
+  return ok(null);
+}
+
 function logAcceso(p) {
   const sh = getSheet(SHEET.logs);
   if (sh.getLastRow() === 0) {
@@ -814,6 +834,13 @@ function initSheetHeaders() {
   if (logSh.getLastRow() === 0) {
     logSh.appendRow(['fecha', 'hora', 'cedula', 'nombre', 'tipo', 'accion']);
     logSh.setFrozenRows(1);
+  }
+
+  // Consentimientos (Ley 8968)
+  const conSh = getSheet(SHEET.consentimientos);
+  if (conSh.getLastRow() === 0) {
+    conSh.appendRow(['fecha', 'hora', 'cedula', 'nombre', 'version_aviso', 'aceptado']);
+    conSh.setFrozenRows(1);
   }
 
   SpreadsheetApp.getUi().alert('Hojas creadas correctamente. Revise el spreadsheet.');

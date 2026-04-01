@@ -153,8 +153,9 @@ async function loadEmployees() {
 }
 
 // ── STATE ──
-let currentUser   = null;
-let isAdmin       = false;
+let currentUser      = null;
+let isAdmin          = false;
+let privacyAccepted  = false;   // se resetea en cada carga de página
 let currentType   = null;
 let pendingTicket = null;
 let tickets       = [];        // se carga desde Google Sheets
@@ -454,6 +455,13 @@ async function doLogin(){
   const raw=document.getElementById('cedulaInput').value.trim();
   const v=raw.replace(/[-.\s]/g,'');
   const err=document.getElementById('loginError');
+  // Verificar que aceptó el aviso de privacidad
+  if(!privacyAccepted){
+    err.style.display='block';
+    err.textContent='Debe leer y aceptar el Aviso de Privacidad antes de ingresar.';
+    document.getElementById('privacyModal').style.display='flex';
+    return;
+  }
   if(!validateCedula(v)){err.style.display='block';err.textContent='Ingrese una cédula válida (8–12 dígitos).';return;}
 
   // Siempre verificar contra Google Sheets (datos frescos, sin caché)
@@ -474,8 +482,9 @@ async function doLogin(){
   err.style.display='none';
   currentUser=emp; isAdmin=false;
   sessionStorage.setItem('hr_session', JSON.stringify({cedula: emp.cedula}));
-  // Registrar acceso en hoja Logs (fire & forget)
-  gasGet({action:'logAcceso', cedula:emp.cedula, nombre:emp.nombre, tipo:'colaborador', accion:'login'});
+  // Registrar acceso y consentimiento en GAS (fire & forget)
+  gasGet({action:'logAcceso',       cedula:emp.cedula, nombre:emp.nombre, tipo:'colaborador', accion:'login'});
+  gasGet({action:'logConsentimiento', cedula:emp.cedula, nombre:emp.nombre, version:'Aviso-v1'});
   show('appScreen');
   document.getElementById('userName').textContent  =emp.nombre.split(' ').slice(0,2).join(' ');
   document.getElementById('userCedula').textContent='Cédula: '+emp.cedula;
@@ -1849,22 +1858,24 @@ window.addEventListener('offline', () => {
 // AVISO DE PRIVACIDAD — Ley N.º 8968 (Costa Rica)
 // ══════════════════════════════════════════════════════
 function checkPrivacyConsent() {
-  if (!localStorage.getItem('hr_privacy_v1')) {
-    document.getElementById('privacyModal').style.display = 'flex';
-  }
+  // Siempre mostrar el aviso en cada carga de página
+  privacyAccepted = false;
+  document.getElementById('privacyCheck').checked = false;
+  const btn = document.getElementById('privacyBtn');
+  btn.disabled = true; btn.style.opacity = '0.45'; btn.style.cursor = 'not-allowed';
+  document.getElementById('privacyModal').style.display = 'flex';
 }
 
 function togglePrivacyBtn() {
   const btn     = document.getElementById('privacyBtn');
   const checked = document.getElementById('privacyCheck').checked;
   btn.disabled       = !checked;
-  btn.style.opacity  = checked ? '1'        : '0.5';
-  btn.style.cursor   = checked ? 'pointer'  : 'not-allowed';
+  btn.style.opacity  = checked ? '1'       : '0.45';
+  btn.style.cursor   = checked ? 'pointer' : 'not-allowed';
 }
 
 function acceptPrivacy() {
-  localStorage.setItem('hr_privacy_v1',    'accepted');
-  localStorage.setItem('hr_privacy_fecha', new Date().toISOString());
+  privacyAccepted = true;
   document.getElementById('privacyModal').style.display = 'none';
 }
 
