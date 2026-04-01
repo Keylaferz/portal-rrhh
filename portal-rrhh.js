@@ -4,7 +4,7 @@
    ══════════════════════════════════════════ */
 
 // ── CONFIG — pegue aquí su URL del GAS ──
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbx6bCZhKOJ2qVzglONAcpn9AFtW2mzCm6pfpgz4-HwB7IsRE_9PVr_LXv_GUZYj3UV0_g/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbz75T7tkDMtjpshKxB7U8EviRuoMPRFNH0vmnuRdmwX13nptNX6QJ2bUuQbOBQ5t_V1Wg/exec';
 
 // ── CONFIG NOTIFICACIONES ──
 // Para cambiar los correos mostrados en el modal de resolución,
