@@ -12,6 +12,58 @@
 <!-- Banner sin conexión -->
 <div id="offlineBanner" role="alert">Sin conexión — mostrando datos en caché local</div>
 
+<!-- ══ MODAL AVISO DE PRIVACIDAD (Ley N.º 8968) ══ -->
+<div id="privacyModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(5,41,96,0.88);align-items:center;justify-content:center;padding:16px" role="dialog" aria-modal="true" aria-labelledby="privacyTitle">
+  <div style="background:#fff;border-radius:14px;max-width:520px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 8px 40px rgba(5,41,96,.35)">
+    <!-- Cabecera -->
+    <div style="background:linear-gradient(135deg,#052960,#1565C0);padding:20px 24px;border-radius:14px 14px 0 0">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:8px 12px;font-weight:900;font-size:15px;color:#fff;letter-spacing:-0.5px">LC</div>
+        <div>
+          <div id="privacyTitle" style="font-family:'DM Serif Display',serif;font-size:18px;color:#fff">Aviso de Privacidad</div>
+          <div style="font-size:10px;color:#ADDCFF;letter-spacing:.5px;margin-top:2px">Ley N.º 8968 — Protección de Datos Personales · Costa Rica</div>
+        </div>
+      </div>
+    </div>
+    <!-- Cuerpo -->
+    <div style="padding:20px 24px">
+      <div style="background:#EFF6FF;border-radius:8px;padding:14px 16px;font-size:13px;line-height:1.75;color:#334155;margin-bottom:16px">
+        <p style="margin:0 0 10px"><strong style="color:#052960">Responsable del tratamiento:</strong> Lean Consulting S.A.</p>
+
+        <p style="margin:0 0 6px"><strong style="color:#052960">¿Qué datos recopilamos?</strong></p>
+        <ul style="margin:0 0 10px;padding-left:18px">
+          <li>Identificación personal (nombre completo, cédula)</li>
+          <li>Información laboral (puesto, fecha de ingreso, salario)</li>
+          <li>Correo electrónico corporativo</li>
+          <li>Solicitudes de ausencias, vacaciones e incapacidades</li>
+          <li>Comprobantes de pago mensuales</li>
+          <li>Registros de acceso al portal (fecha, hora)</li>
+        </ul>
+
+        <p style="margin:0 0 6px"><strong style="color:#052960">¿Para qué los usamos?</strong></p>
+        <p style="margin:0 0 10px">Exclusivamente para la <strong>gestión interna de Recursos Humanos</strong> de Lean Consulting S.A.: control de vacaciones, registro de solicitudes de ausencia, envío de comprobantes de pago y administración del expediente laboral.</p>
+
+        <p style="margin:0 0 6px"><strong style="color:#052960">¿Quién tiene acceso?</strong></p>
+        <p style="margin:0 0 10px">Únicamente el personal autorizado del área de RRHH de Lean Consulting S.A. Los datos <strong>no son compartidos con terceros externos</strong> bajo ninguna circunstancia.</p>
+
+        <p style="margin:0 0 6px"><strong style="color:#052960">¿Cómo se protegen?</strong></p>
+        <p style="margin:0">Los datos se almacenan en Google Workspace con acceso restringido mediante credenciales individuales. Los archivos en Google Drive tienen permisos limitados al personal de RRHH. El acceso al portal requiere autenticación por cédula o contraseña.</p>
+      </div>
+
+      <!-- Checkbox de aceptación -->
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px 14px;background:#F8FAFC;border:1.5px solid #CBD5E1;border-radius:8px;margin-bottom:16px">
+        <input type="checkbox" id="privacyCheck" onchange="togglePrivacyBtn()" style="width:17px;height:17px;margin-top:2px;cursor:pointer;flex-shrink:0;accent-color:#1565C0"/>
+        <span style="font-size:13px;color:#334155;line-height:1.6">He leído y <strong>acepto el Aviso de Privacidad</strong> conforme a la Ley N.º 8968 de Costa Rica. Comprendo que mis datos serán utilizados exclusivamente para la gestión interna de Recursos Humanos de Lean Consulting S.A.</span>
+      </label>
+
+      <button id="privacyBtn" onclick="acceptPrivacy()" disabled
+        style="width:100%;padding:12px;background:#1565C0;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:not-allowed;opacity:0.45;transition:opacity .2s">
+        Acepto y continúo →
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ LOGIN ══ -->
 <div id="loginScreen" class="screen active">
   <div class="login-card">

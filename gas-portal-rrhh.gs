@@ -31,6 +31,7 @@ const SHEET = {
   expedientes:  'Expedientes',
   admins:       'Admins',
   comprobantes: 'Comprobantes',
+  logs:         'Logs',
 };
 
 // ══════════════════════════════════════════════════════════════════
@@ -192,6 +193,9 @@ function doGet(e) {
       case 'saveComprobante':       return jsonOut(saveComprobante(p));
       case 'getComprobantes':       return jsonOut(getComprobantes(p));
       case 'getComprobantesAdmin':  return jsonOut(getComprobantesAdmin());
+
+      // ── Logs de acceso ─────────────────────────────────────────
+      case 'logAcceso':             return jsonOut(logAcceso(p));
 
       default:
         return jsonOut(err('Acción no reconocida: ' + action));
@@ -737,6 +741,29 @@ function getComprobantesAdmin() {
 }
 
 // ══════════════════════════════════════════════════════════════════
+//  LOGS DE ACCESO (Ley N.º 8968 — trazabilidad)
+// ══════════════════════════════════════════════════════════════════
+
+function logAcceso(p) {
+  const sh = getSheet(SHEET.logs);
+  if (sh.getLastRow() === 0) {
+    sh.appendRow(['fecha', 'hora', 'cedula', 'nombre', 'tipo', 'accion']);
+    // Congelar fila de encabezados y dar formato
+    sh.setFrozenRows(1);
+  }
+  const now = new Date();
+  sh.appendRow([
+    now.toLocaleDateString('es-CR'),
+    now.toLocaleTimeString('es-CR'),
+    String(p.cedula  || '—'),
+    String(p.nombre  || '—'),
+    String(p.tipo    || 'colaborador'),
+    String(p.accion  || 'login'),
+  ]);
+  return ok(null);
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  UTILIDAD — Inicializar headers de todas las hojas
 //  Ejecute esta función UNA VEZ manualmente desde el editor de GAS
 //  (Menú Ejecutar → initSheetHeaders) para crear los encabezados.
@@ -781,6 +808,13 @@ function initSheetHeaders() {
 
   // Comprobantes
   ensureComprobantesSheet();
+
+  // Logs
+  const logSh = getSheet(SHEET.logs);
+  if (logSh.getLastRow() === 0) {
+    logSh.appendRow(['fecha', 'hora', 'cedula', 'nombre', 'tipo', 'accion']);
+    logSh.setFrozenRows(1);
+  }
 
   SpreadsheetApp.getUi().alert('Hojas creadas correctamente. Revise el spreadsheet.');
 }

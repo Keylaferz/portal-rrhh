@@ -474,6 +474,8 @@ async function doLogin(){
   err.style.display='none';
   currentUser=emp; isAdmin=false;
   sessionStorage.setItem('hr_session', JSON.stringify({cedula: emp.cedula}));
+  // Registrar acceso en hoja Logs (fire & forget)
+  gasGet({action:'logAcceso', cedula:emp.cedula, nombre:emp.nombre, tipo:'colaborador', accion:'login'});
   show('appScreen');
   document.getElementById('userName').textContent  =emp.nombre.split(' ').slice(0,2).join(' ');
   document.getElementById('userCedula').textContent='Cédula: '+emp.cedula;
@@ -505,7 +507,11 @@ async function doAdminLogin(){
   // Validar contra GAS — única fuente de verdad
   if(GAS_URL){
     const res = await callGAS({action:'authAdmin', user:u, pass:p}, true);
-    if(res && res.ok){ initAdmin(); return; }
+    if(res && res.ok){
+    gasGet({action:'logAcceso', cedula:'admin', nombre:'Administrador', tipo:'admin', accion:'login'});
+    initAdmin();
+    return;
+  }
     if(!res){
       // GAS no respondió (timeout, red caída)
       err.style.display='block';
@@ -1839,8 +1845,32 @@ window.addEventListener('offline', () => {
   toast('Sin conexión', 'Mostrando datos en caché local', 'warning');
 });
 
+// ══════════════════════════════════════════════════════
+// AVISO DE PRIVACIDAD — Ley N.º 8968 (Costa Rica)
+// ══════════════════════════════════════════════════════
+function checkPrivacyConsent() {
+  if (!localStorage.getItem('hr_privacy_v1')) {
+    document.getElementById('privacyModal').style.display = 'flex';
+  }
+}
+
+function togglePrivacyBtn() {
+  const btn     = document.getElementById('privacyBtn');
+  const checked = document.getElementById('privacyCheck').checked;
+  btn.disabled       = !checked;
+  btn.style.opacity  = checked ? '1'        : '0.5';
+  btn.style.cursor   = checked ? 'pointer'  : 'not-allowed';
+}
+
+function acceptPrivacy() {
+  localStorage.setItem('hr_privacy_v1',    'accepted');
+  localStorage.setItem('hr_privacy_fecha', new Date().toISOString());
+  document.getElementById('privacyModal').style.display = 'none';
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   _updateOfflineBanner();
+  checkPrivacyConsent();
   restoreSession();
   // Pre-cargar lista de empleados en segundo plano para que el login sea inmediato
   if (GAS_URL && GAS_URL !== 'PEGUE_SU_URL_GAS_AQUI') {
