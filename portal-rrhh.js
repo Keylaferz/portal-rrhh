@@ -4,7 +4,7 @@
    ══════════════════════════════════════════ */
 
 // ── CONFIG — pegue aquí su URL del GAS ──
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbxcHQJ0sBvFBmGIPF7Kr7Qma0M9l3PHz6il_7Xr-4ffVc10C1eAl77OKPo8NsC7O47uJQ/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzrEg4CFUbNIY3kandMM6m9XQYiuiQZOcGtqoCvfAakVgZKqoAXAYvvOKZmUFWJkvefQw/exec';
 
 // ── CONFIG NOTIFICACIONES ──
 // Para cambiar los correos mostrados en el modal de resolución,
@@ -239,7 +239,8 @@ function calcVac(emp){
   if(hoy.getDate()<ini.getDate()) m--;
   if(m<0) m=0;
   const dm=new Date(hoy.getFullYear(),hoy.getMonth()+1,0).getDate();
-  const im=new Date(hoy.getFullYear(),hoy.getMonth(),ini.getDate());
+  const safeDay=Math.min(ini.getDate(),dm);
+  const im=new Date(hoy.getFullYear(),hoy.getMonth(),safeDay);
   const f=hoy>=im?Math.min((hoy-im)/(dm*864e5),1):0;
   const acum=Math.floor(m+f); // días acumulados siempre enteros (1 por mes)
   // Solo se descuentan vacaciones APROBADAS (no pendientes ni en gestión)
@@ -1252,9 +1253,9 @@ function renderTickets(){
             &nbsp;·&nbsp; ${t.details.turno||'Día completo'}
             ${t.details.excluidos>0?`<span style="color:var(--orange);font-size:10px"> · ${t.details.excluidos} excluido(s)</span>`:''}
           </div>
-          ${t.notaAdmin?`<div class="tdesc" style="color:var(--b700)">📝 RRHH: <em>${t.notaAdmin}</em></div>`:''}
-          ${t.obs?`<div class="tdesc" style="font-style:italic;color:var(--g400)">💬 ${t.obs}</div>`:''}
-          ${t.motivoCancelacion?`<div class="tdesc" style="color:var(--red)">🚫 ${t.motivoCancelacion}</div>`:''}
+          ${t.notaAdmin?`<div class="tdesc" style="color:var(--b700)">📝 RRHH: <em>${escHTML(t.notaAdmin)}</em></div>`:''}
+          ${t.obs?`<div class="tdesc" style="font-style:italic;color:var(--g400)">💬 ${escHTML(t.obs)}</div>`:''}
+          ${t.motivoCancelacion?`<div class="tdesc" style="color:var(--red)">🚫 ${escHTML(t.motivoCancelacion)}</div>`:''}
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
           ${sbadge(t.status)}
@@ -1380,9 +1381,9 @@ function renderFullHistory(){
               📅 ${fmt(t.details.inicio)} → ${fmt(t.details.fin)} · <strong>${t.details.dias} días solicitados</strong>
               ${t.details.turno?` · ${t.details.turno}`:''}
             </div>
-            ${t.notaAdmin?`<div style="font-size:11px;color:var(--b700);margin-top:2px">📝 RRHH: ${t.notaAdmin}</div>`:''}
-            ${t.motivoCancelacion?`<div style="font-size:11px;color:var(--red);margin-top:2px">🚫 ${t.motivoCancelacion}</div>`:''}
-            ${t.motivoEdicion?`<div style="font-size:11px;color:var(--orange);margin-top:2px">✏️ Motivo edición: ${t.motivoEdicion}</div>`:''}
+            ${t.notaAdmin?`<div style="font-size:11px;color:var(--b700);margin-top:2px">📝 RRHH: ${escHTML(t.notaAdmin)}</div>`:''}
+            ${t.motivoCancelacion?`<div style="font-size:11px;color:var(--red);margin-top:2px">🚫 ${escHTML(t.motivoCancelacion)}</div>`:''}
+            ${t.motivoEdicion?`<div style="font-size:11px;color:var(--orange);margin-top:2px">✏️ Motivo edición: ${escHTML(t.motivoEdicion)}</div>`:''}
           </div>`).join('')}
       </div>
     </div>`;
@@ -1442,7 +1443,7 @@ function downloadTicketsPDF(list, titulo, filename=''){
       <td style="padding:8px;font-size:12px;text-align:center">${t.details.dias}</td>
       <td style="padding:8px;font-size:12px">${slabel(t.status)}</td>
       <td style="padding:8px;font-size:12px">${fmt(t.fecha)}</td>
-      <td style="padding:8px;font-size:12px">${t.notaAdmin||'—'}</td>
+      <td style="padding:8px;font-size:12px">${t.notaAdmin?escHTML(t.notaAdmin):'—'}</td>
     </tr>`).join('');
 
   const docTitle = filename || titulo;
@@ -2011,6 +2012,18 @@ function toggleCompMsg(cb) {
   if (!cb.checked) document.getElementById('compMsgText').value = '';
 }
 
+// Convierte un objeto comprobante a etiqueta legible: usa periodo_label guardado
+// en el Sheet si existe; de lo contrario recalcula desde el campo periodo.
+function fmtPeriodo(c) {
+  if (c.periodo_label && !c.periodo_label.includes('undefined')) return c.periodo_label;
+  const _m = ['enero','febrero','marzo','abril','mayo','junio',
+               'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const [cy, cm] = (c.periodo || '').split('-');
+  const idx = parseInt(cm, 10) - 1;
+  if (idx >= 0 && idx < 12 && cy) return `${_m[idx]} ${cy}`;
+  return c.periodo || '—';
+}
+
 // ── Historial admin ──
 let _compAdminData = [];
 
@@ -2061,8 +2074,7 @@ function filterCompAdminHistory() {
   }
 
   list.innerHTML = filtered.map(c => {
-    const [cy, cm] = (c.periodo||'').split('-');
-    const label = cm ? `${meses[parseInt(cm)-1]} ${cy}` : (c.periodo||'—');
+    const label = fmtPeriodo(c);
     const driveUrl = c.drive_url || '';
     return `<div class="comp-card">
       <div class="comp-card-left">
@@ -2119,8 +2131,7 @@ function renderMisComprobantes() {
   }
 
   el.innerHTML = filtered.map((c, i) => {
-    const [cy, cm] = (c.periodo || '').split('-');
-    const label    = cm ? `${meses[parseInt(cm)-1]} ${cy}` : c.periodo;
+    const label = fmtPeriodo(c);
     const driveUrl = c.drive_url || '';
     return `<div class="comp-card">
       <div class="comp-card-left" style="cursor:pointer;flex:1" onclick="openCompModal(${i})">
@@ -2151,10 +2162,7 @@ function openCompModal(idx) {
   if (!c) return;
   currentComprobante = c;
 
-  const [cy, cm] = (c.periodo || '').split('-');
-  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  const label = cm ? `${meses[parseInt(cm)-1]} ${cy}` : c.periodo;
-
+  const label = fmtPeriodo(c);
   document.getElementById('compModalTitle').textContent = `Comprobante — ${label}`;
 
   const fmt = n => (parseFloat(n)||0).toLocaleString('es-CR');
@@ -2220,14 +2228,15 @@ function printComprobante() {
   const pv   = k => parseFloat(c[k]) || 0;
   const fmt  = n => (parseFloat(n)||0).toLocaleString('es-CR');
 
+  const _m2 = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const [cy, cm] = (c.periodo || '').split('-');
-  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  const label = cm ? `${meses[parseInt(cm)-1]} ${cy}` : c.periodo;
+  const label = fmtPeriodo(c);
   // Fecha larga ej: "31 de diciembre de 2025"
   const dateLabel = (() => {
-    if (!cy || !cm) return label;
+    const idx = parseInt(cm, 10) - 1;
+    if (!cy || idx < 0 || idx > 11) return label;
     const lastDay = new Date(parseInt(cy), parseInt(cm), 0).getDate();
-    return `${lastDay} de ${meses[parseInt(cm)-1]} de ${cy}`;
+    return `${lastDay} de ${_m2[idx]} de ${cy}`;
   })();
 
   const diasTrab      = pv('dias_trabajados');
