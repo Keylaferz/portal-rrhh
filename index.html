@@ -50,14 +50,8 @@
         <p style="margin:0">Los datos se almacenan en Google Workspace con acceso restringido mediante credenciales individuales. Los archivos en Google Drive tienen permisos limitados al personal de RRHH. El acceso al portal requiere autenticación por cédula o contraseña.</p>
       </div>
 
-      <!-- Checkbox de aceptación -->
-      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px 14px;background:#F8FAFC;border:1.5px solid #CBD5E1;border-radius:8px;margin-bottom:16px">
-        <input type="checkbox" id="privacyCheck" onchange="togglePrivacyBtn()" style="width:17px;height:17px;margin-top:2px;cursor:pointer;flex-shrink:0;accent-color:#1565C0"/>
-        <span style="font-size:13px;color:#334155;line-height:1.6">He leído y <strong>acepto el Aviso de Privacidad</strong> conforme a la Ley N.º 8968 de Costa Rica. Comprendo que mis datos serán utilizados exclusivamente para la gestión interna de Recursos Humanos de Lean Consulting S.A.</span>
-      </label>
-
-      <button id="privacyBtn" onclick="acceptPrivacy()" disabled
-        style="width:100%;padding:12px;background:#1565C0;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:not-allowed;opacity:0.45;transition:opacity .2s">
+      <button onclick="acceptPrivacy()"
+        style="width:100%;padding:12px;background:#1565C0;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">
         Acepto y continúo →
       </button>
     </div>
@@ -83,6 +77,12 @@
         <input type="text" id="cedulaInput" placeholder="Ej: 111320139" maxlength="15"
           aria-label="Número de cédula" aria-required="true" inputmode="numeric"
           onkeydown="if(event.key==='Enter')doLogin()" autocomplete="off"/></div>
+      <div style="margin:10px 0;padding:9px 12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="openPrivacyModal(event)">
+          <input type="checkbox" id="loginPrivacyCheck" style="width:15px;height:15px;accent-color:#1565C0;pointer-events:none;flex-shrink:0" readonly/>
+          <span style="font-size:12px;color:#1E40AF;line-height:1.4">Acepto el <strong>Aviso de Privacidad</strong> <span style="color:#6B7280;font-size:11px">(Ley N.º 8968)</span></span>
+        </label>
+      </div>
       <button class="btn-primary" onclick="doLogin()" aria-label="Ingresar al portal">Ingresar →</button>
       <p class="hint">Acceso exclusivo para colaboradores registrados</p>
     </div>
